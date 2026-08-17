@@ -58,12 +58,11 @@ router.get(
   authMiddleware,
   getKnowledge
 );
-
-router.post("/",
+router.post(
+  "/",
   authMiddleware,
   createKnowledge
-)
-
+);
 router.put(
   "/:id",
   authMiddleware,

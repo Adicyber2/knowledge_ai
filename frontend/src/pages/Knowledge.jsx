@@ -5,8 +5,8 @@ import KnowledgeCard from "../components/KnowledgeCard";
 
 import { getKnowledge,deleteKnowledge } from "../service/knowledgeService";
 
-import EditKnowledgeModal
-  from "../components/AddKnowledgeModal";
+import AddKnowledgeModal from "../components/AddKnowledgeModal";
+import EditKnowledgeModal from "../components/EditKnowledgeModal";
 
   import "./knowledge.css"
 
@@ -48,25 +48,33 @@ const Knowledge = () => {
 
     const [editingItem, setEditingItem] =
   useState(null);
+  
+
+  const handleAddKnowledge = async () => {
+  try {
+    const data = await getKnowledge();
+    setKnowledge(data);
+    setShowModal(false);
+  } catch (error) {
+    console.error("Failed to refresh knowledge:", error);
+  }
+};
 
 
   // ==============================
   // Load Knowledge
   // ==============================
 
- useEffect(() => {
+useEffect(() => {
   const loadKnowledge = async () => {
     try {
       setLoading(true);
-      setError("");
 
       const data = await getKnowledge();
 
-      setKnowledge(Array.isArray(data) ? data : []);
-
+      setKnowledge(data || []);
     } catch (error) {
-      console.error(error);
-      setError("Unable to load your knowledge.");
+      console.error("Failed to load knowledge:", error);
     } finally {
       setLoading(false);
     }
@@ -74,7 +82,6 @@ const Knowledge = () => {
 
   loadKnowledge();
 }, []);
-
 
   // ==============================
   // Get All Unique Tags
@@ -232,11 +239,11 @@ const filteredKnowledge = useMemo(() => {
 
 
           <button
-            className="primary-button"
-           
-          >
-            + Add Knowledge
-          </button>
+  className="primary-button"
+  onClick={() => setShowModal(true)}
+>
+  + Add Knowledge
+</button>
 
         </header>
 
@@ -470,11 +477,11 @@ const filteredKnowledge = useMemo(() => {
             </p>
 
             <button
-              className="primary-button"
-             
-            >
-              Add your first knowledge
-            </button>
+  className="primary-button"
+  onClick={() => setShowModal(true)}
+>
+  Add your first knowledge
+</button>
 
           </div>
 
@@ -555,7 +562,7 @@ const filteredKnowledge = useMemo(() => {
 
           <AddKnowledgeModal
             onClose={() =>
-              setShowModal(false)
+               onClose={handleAddKnowledge}
             }
 
             onSaved={(newKnowledge) => {

@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { createKnowledge } from "../service/knowledgeService";
+import "./AddKnowledgeModal.css";
 
 const AddKnowledgeModal = ({
   onClose,
@@ -31,62 +32,32 @@ const AddKnowledgeModal = ({
   };
 
 
-  const handleSubmit = async (e) => {
+ const handleSubmit = async (e) => {
+  e.preventDefault();
 
-    e.preventDefault();
+  try {
+    setLoading(true);
 
-    try {
+  const newKnowledge = await createKnowledge(form);
 
-      setLoading(true);
-      setError("");
+    console.log("Knowledge created:", newKnowledge);
 
+    onClose();
 
-      const data = {
+  } catch (error) {
+    console.error(
+      "Failed to create knowledge:",
+      error.response?.data || error.message
+    );
 
-        title: form.title.trim(),
-
-        content: form.content.trim(),
-
-        sourceUrl:
-          form.sourceUrl.trim(),
-
-        sourceType:
-          form.sourceType,
-
-        tags: form.tags
-          .split(",")
-          .map((tag) =>
-            tag.trim().toLowerCase()
-          )
-          .filter(Boolean),
-
-      };
-
-
-      const newKnowledge =
-        await createKnowledge(data);
-
-
-      onSaved(newKnowledge);
-
-      onClose();
-
-
-    } catch (error) {
-
-      console.error(error);
-
-      setError(
-        error.response?.data?.message ||
-        "Failed to save knowledge"
-      );
-
-    } finally {
-
-      setLoading(false);
-
-    }
-  };
+    alert(
+      error.response?.data?.message ||
+      "Failed to create knowledge"
+    );
+  } finally {
+    setLoading(false);
+  }
+};
 
 
   return (

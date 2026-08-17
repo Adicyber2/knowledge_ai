@@ -6,7 +6,7 @@ export const getKnowledge = async () => {
 
   console.log("Knowledge API response:", response.data);
 
-  return response.data.data;
+  return response.data.knowledge;
 };
 
 

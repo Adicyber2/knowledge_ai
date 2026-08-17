@@ -19,15 +19,15 @@ const knowledgeSchema = new mongoose.Schema(
     },
 
     sourceType: {
-      type: String,
-      enum: [
-        "pdf",
-        "article",
-        "youtube",
-        "text"
-      ],
-      default: "text",
-    },
+  type: String,
+  enum: [
+    "note",
+    "article",
+    "youtube",
+    "pdf"
+  ],
+  default: "note",
+},
 
     sourceUrl: {
       type: String,
