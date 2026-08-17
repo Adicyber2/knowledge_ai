@@ -1,0 +1,52 @@
+import api from "./api";
+
+
+export const getKnowledge = async () => {
+  const response = await api.get("/knowledge");
+
+  console.log("Knowledge API response:", response.data);
+
+  return response.data.data;
+};
+
+
+export const createKnowledge = async (
+  data
+) => {
+
+  const response =
+    await api.post(
+      "/knowledge",
+      data
+    );
+
+  return response.data.data;
+};
+
+
+export const updateKnowledge = async (
+  id,
+  data
+) => {
+
+  const response =
+    await api.put(
+      `/knowledge/${id}`,
+      data
+    );
+
+  return response.data.data;
+};
+
+
+export const deleteKnowledge = async (
+  id
+) => {
+
+  const response =
+    await api.delete(
+      `/knowledge/${id}`
+    );
+
+  return response.data;
+};
