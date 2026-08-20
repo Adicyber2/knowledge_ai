@@ -9,6 +9,7 @@ import Dashboard from "./pages/Dashboard";
 import Login from "./pages/Login";
 import Register from "./pages/Register";
 import Knowledge from "./pages/Knowledge";
+import AIChat from "./pages/AIChat";
 import ProtectedRoute from "./components/ProtectedRoute";
 
 function App() {
@@ -55,6 +56,13 @@ function App() {
       <Knowledge />
     </ProtectedRoute>
   }
+/>
+
+<Route
+  path="/ai-chat"
+  element={<ProtectedRoute>
+    <AIChat />
+  </ProtectedRoute>}
 />
 
       </Routes>

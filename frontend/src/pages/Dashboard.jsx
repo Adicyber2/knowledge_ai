@@ -246,9 +246,7 @@ const Dashboard = () => {
 
             {/* Existing UI preserved */}
 
-            <em>
-              +12%
-            </em>
+           
 
           </div>
 
@@ -278,9 +276,7 @@ const Dashboard = () => {
             </div>
 
 
-            <em>
-              +18%
-            </em>
+           
 
           </div>
 
@@ -310,9 +306,7 @@ const Dashboard = () => {
             </div>
 
 
-            <em>
-              +8%
-            </em>
+           
 
           </div>
 
@@ -342,9 +336,7 @@ const Dashboard = () => {
             </div>
 
 
-            <em>
-              +8%
-            </em>
+            
 
           </div>
 
@@ -374,9 +366,7 @@ const Dashboard = () => {
             </div>
 
 
-            <em>
-              +24%
-            </em>
+            
 
           </div>
 

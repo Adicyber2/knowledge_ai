@@ -29,11 +29,17 @@
 
 import api from "./api";
 
-export const askAI = async (message, knowledgeIds = []) => {
-  const response = await api.post("/ai/chat", {
-    message,
-    knowledgeIds,
-  });
+export const askAI = async (
+  question,
+  knowledgeIds = []
+) => {
+  const response = await api.post(
+    "/ai/ask",
+    {
+      question,
+      knowledgeIds,
+    }
+  );
 
   return response.data;
 };

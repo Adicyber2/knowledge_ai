@@ -35,7 +35,7 @@ const Sidebar = () => {
             Knowledge
           </NavLink>
 
-          <NavLink to="/chat">
+          <NavLink to="/ai-chat">
             <span>✦</span>
             AI Chat
           </NavLink>

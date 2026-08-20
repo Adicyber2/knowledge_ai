@@ -5,6 +5,8 @@ import connectDB from "./src/config/database.js";
 import authRoutes from "./src/routers/auth.routes.js";
 import knowledgeRoutes from "./src/routers/knowledge.routes.js";
 import aiRoutes from "./src/routers/ai.routes.js";
+import chatRoutes from "./src/routers/chat.routes.js";
+
 
 dotenv.config();
 
@@ -25,6 +27,8 @@ app.use("/api/auth", authRoutes);
 app.use("/api/knowledge", knowledgeRoutes);
 
 app.use("/api/ai", aiRoutes);
+
+app.use("/api/chats", chatRoutes);
 
 
 app.listen(3000, () => {

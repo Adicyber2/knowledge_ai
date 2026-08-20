@@ -16,6 +16,7 @@ class SearchRequest(BaseModel):
 class AskRequest(BaseModel):
     question: str
     userId: str
+    context: str = ""
 
 
 class ContentRequest(BaseModel):
@@ -73,8 +74,12 @@ def search(data: SearchRequest):
 
 @router.post("/ask")
 def ask(data: AskRequest):
+    print("QUESTION:", data.question)
+    print("USER ID:", data.userId)
+    print("CONTEXT:", data.context)
 
     return ask_knowledge(
         question=data.question,
-        user_id=data.userId
+        user_id=data.userId,
+        context=data.context
     )

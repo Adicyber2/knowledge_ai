@@ -14,3 +14,5 @@ def home():
     return {
         "message": "AI Service is running 🚀"
     }
+
+
