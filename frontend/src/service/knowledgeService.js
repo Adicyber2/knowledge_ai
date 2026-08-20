@@ -20,7 +20,7 @@ export const createKnowledge = async (
       data
     );
 
-  return response.data.data;
+ return response.data.knowledge;
 };
 
 
@@ -35,7 +35,7 @@ export const updateKnowledge = async (
       data
     );
 
-  return response.data.data;
+ return response.data;
 };
 
 
@@ -48,5 +48,10 @@ export const deleteKnowledge = async (
       `/knowledge/${id}`
     );
 
+  return response.data;
+};
+
+export const analyzeKnowledge = async (id) => {
+  const response = await api.post(`/knowledge/${id}/analyze`);
   return response.data;
 };

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState ,useEffect} from "react";
 
 import {
   updateKnowledge,
@@ -11,69 +11,69 @@ const EditKnowledgeModal = ({
   onUpdated,
 }) => {
 
-  const [form, setForm] = useState({
-    title: item.title || "",
-    content: item.content || "",
-    sourceType: item.sourceType || "note",
-    sourceUrl: item.sourceUrl || "",
-  });
+ const [formData, setFormData] = useState({
+  title: "",
+  content: "",
+  sourceType: "text",
+  sourceUrl: "",
+});
 
-
-  const [loading, setLoading] =
-    useState(false);
+const [loading, setLoading] = useState(false);
 
 
   const [error, setError] =
     useState("");
 
 
-  const handleChange = (e) => {
+    useEffect(() => {
+  if (!knowledge) return;
 
-    setForm({
-      ...form,
-      [e.target.name]: e.target.value,
-    });
+  setFormData({
+    title: knowledge.title || "",
+    content: knowledge.content || "",
+    sourceType: knowledge.sourceType || "text",
+    sourceUrl: knowledge.sourceUrl || "",
+  });
+}, [knowledge]);
 
-  };
+
+ const handleChange = (e) => {
+  const { name, value } = e.target;
+
+  setFormData((prev) => ({
+    ...prev,
+    [name]: value,
+  }));
+};
 
 
   const handleSubmit = async (e) => {
+  e.preventDefault();
 
-    e.preventDefault();
+  try {
+    setLoading(true);
 
-    try {
+    await updateKnowledge(
+      knowledge._id,
+      formData
+    );
 
-      setLoading(true);
-      setError("");
+    onSaved();
 
+  } catch (error) {
+    console.error(
+      "Update failed:",
+      error.response?.data || error.message
+    );
 
-      const updated =
-        await updateKnowledge(
-          item._id,
-          form
-        );
-
-
-      onUpdated(updated);
-
-      onClose();
-
-    } catch (error) {
-
-      console.error(error);
-
-      setError(
-        error.response?.data?.message ||
-        "Failed to update knowledge"
-      );
-
-    } finally {
-
-      setLoading(false);
-
-    }
-
-  };
+    alert(
+      error.response?.data?.message ||
+      "Failed to update knowledge"
+    );
+  } finally {
+    setLoading(false);
+  }
+};
 
 
   return (

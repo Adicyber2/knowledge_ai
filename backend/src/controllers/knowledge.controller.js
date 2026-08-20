@@ -4,7 +4,7 @@ import {
   analyzeKnowledge,
 } from "../services/aiService.js";
 
-// CREATE KNOWLEDGE
+
 export const createKnowledge =
   async (req, res) => {
 
@@ -32,7 +32,7 @@ export const createKnowledge =
       }
 
 
-      // 1️⃣ Save first
+
 
       const knowledge =
         await Knowledge.create({
@@ -52,7 +52,6 @@ export const createKnowledge =
         });
 
 
-      // 2️⃣ Send to Python AI service
 
       try {
 
@@ -68,7 +67,6 @@ export const createKnowledge =
           });
 
 
-        // 3️⃣ Save AI result
 
         knowledge.summary =
           aiData.summary || "";
@@ -130,7 +128,7 @@ export const createKnowledge =
   };
 
 
-// GET ALL KNOWLEDGE
+
 export const getKnowledge = async (req, res) => {
   try {
     const knowledge = await Knowledge.find({
@@ -152,7 +150,6 @@ export const getKnowledge = async (req, res) => {
 };
 
 
-// DELETE KNOWLEDGE
 export const updateKnowledge = async (req, res) => {
   try {
     const { id } = req.params;

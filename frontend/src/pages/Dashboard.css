@@ -534,3 +534,34 @@
   }
 
 }
+
+/* =========================
+   VIEW ALL BUTTON
+========================= */
+
+.recent-section .section-heading > button {
+  border: none;
+  background: transparent;
+  color: #7c5cff;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+
+  padding: 8px 12px;
+  border-radius: 8px;
+
+  transition:
+    background-color 0.2s ease,
+    color 0.2s ease,
+    transform 0.2s ease;
+}
+
+.recent-section .section-heading > button:hover {
+  background: rgba(124, 92, 255, 0.08);
+  color: #6847f5;
+  transform: translateX(2px);
+}
+
+.recent-section .section-heading > button:active {
+  transform: translateX(0);
+}

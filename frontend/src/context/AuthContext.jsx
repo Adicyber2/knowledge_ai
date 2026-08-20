@@ -1,4 +1,4 @@
-import { createContext, useContext, useState } from "react";
+import { createContext, useContext, useState ,useEffect} from "react";
 import api from "../service/api";
 
 const AuthContext = createContext();
@@ -8,6 +8,7 @@ export const AuthProvider = ({ children }) => {
     const savedUser = localStorage.getItem("user");
     return savedUser ? JSON.parse(savedUser) : null;
   });
+  const [loading, setLoading] = useState(true);
 
   const login = async (email, password) => {
     const response = await api.post("/auth/login", {
@@ -33,6 +34,34 @@ export const AuthProvider = ({ children }) => {
     });
   };
 
+
+  const loadUser = async () => {
+  const token = localStorage.getItem("token");
+
+  if (!token) {
+    setUser(null);
+    setLoading(false);
+    return;
+  }
+
+  try {
+    const response = await api.get("/auth/me");
+
+    setUser(response.data.user);
+  } catch (error) {
+    console.error("Failed to load user:", error);
+
+    localStorage.removeItem("token");
+    setUser(null);
+  } finally {
+    setLoading(false);
+  }
+};
+
+useEffect(() => {
+  loadUser();
+}, []);
+
   const logout = () => {
     localStorage.removeItem("token");
     localStorage.removeItem("user");
@@ -44,6 +73,7 @@ export const AuthProvider = ({ children }) => {
     <AuthContext.Provider
       value={{
         user,
+        loading,
         login,
         register,
         logout,

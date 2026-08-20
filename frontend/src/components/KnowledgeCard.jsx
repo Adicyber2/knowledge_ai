@@ -59,18 +59,11 @@ const KnowledgeCard = ({
               </button>
 
 
-              <button
-                className="delete-action"
-                onClick={() => {
-
-                  setMenuOpen(false);
-
-                  onDelete(item);
-
-                }}
-              >
-                🗑 Delete
-              </button>
+             <button
+  onClick={() => handleDeleteKnowledge(item._id)}
+>
+  Delete
+</button>
 
             </div>
 

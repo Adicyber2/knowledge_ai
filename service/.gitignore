@@ -1,3 +1,52 @@
 venv/
 .env
 __pycache__/
+
+
+
+<button
+  className="ai-btn"
+  onClick={() => handleAnalyzeKnowledge(item._id)}
+  disabled={analyzingId === item._id}
+>
+  {analyzingId === item._id
+    ? "Analyzing..."
+    : "✨ Analyze"}
+</button>
+
+{item.summary && (
+  <div className="knowledge-summary">
+    <h4>AI Summary</h4>
+    <p>{item.summary}</p>
+  </div>
+)}
+
+
+
+
+{item.topics?.length > 0 && (
+  <div className="knowledge-topics">
+    <h4>Topics</h4>
+
+    <div className="knowledge-tags">
+      {item.topics.map((topic, index) => (
+        <span
+          key={index}
+          className="knowledge-tag"
+        >
+          {topic}
+        </span>
+      ))}
+    </div>
+  </div>
+)}
+
+
+
+<button
+  className="delete-btn"
+  onClick={() => handleDeleteKnowledge(item._id)}
+  disabled={deletingId === item._id}
+>
+  {deletingId === item._id ? "Deleting..." : "Delete"}
+</button>

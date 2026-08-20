@@ -55,6 +55,7 @@ const Sidebar = () => {
 
           <div className="avatar">
             {user?.name?.charAt(0)?.toUpperCase()}
+            
           </div>
 
           <div>

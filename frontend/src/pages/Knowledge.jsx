@@ -3,7 +3,7 @@ import { useEffect, useMemo, useState } from "react";
 import Sidebar from "../components/Sidebar";
 import KnowledgeCard from "../components/KnowledgeCard";
 
-import { getKnowledge,deleteKnowledge } from "../service/knowledgeService";
+import { getKnowledge,deleteKnowledge, analyzeKnowledge, } from "../service/knowledgeService";
 
 import AddKnowledgeModal from "../components/AddKnowledgeModal";
 import EditKnowledgeModal from "../components/EditKnowledgeModal";
@@ -24,6 +24,8 @@ const Knowledge = () => {
 
   const [error, setError] = useState("");
 
+
+  const [analyzingId, setAnalyzingId] = useState(null);
   
   // ==============================
   // Day 21 Search & Filter States
@@ -37,13 +39,14 @@ const Knowledge = () => {
   const [selectedTag, setSelectedTag] =
     useState("all");
 
+    const [deletingId, setDeletingId] = useState(null);
+
 
   // ==============================
   // Modal State
   // ==============================
 
-  const [showModal, setShowModal] =
-    useState(false);
+const [showEditModal, setShowEditModal] = useState(false);
 
 
     const [editingItem, setEditingItem] =
@@ -54,7 +57,7 @@ const Knowledge = () => {
   try {
     const data = await getKnowledge();
     setKnowledge(data);
-    setShowModal(false);
+     setShowEditModal(false);
   } catch (error) {
     console.error("Failed to refresh knowledge:", error);
   }
@@ -97,6 +100,31 @@ useEffect(() => {
   ];
 }, [knowledge]);
 
+
+const handleAnalyzeKnowledge = async (id) => {
+  try {
+    setAnalyzingId(id);
+
+    await analyzeKnowledge(id);
+
+    const data = await getKnowledge();
+
+    setKnowledge(data || []);
+
+  } catch (error) {
+    console.error(
+      "AI analysis failed:",
+      error.response?.data || error.message
+    );
+
+    alert(
+      error.response?.data?.message ||
+      "AI analysis failed"
+    );
+  } finally {
+    setAnalyzingId(null);
+  }
+};
 
   // ==============================
   // Search + Filter Logic
@@ -147,6 +175,27 @@ const filteredKnowledge = useMemo(() => {
   selectedTag,
 ]);
 
+/**const filteredKnowledge = knowledge.filter((item) => {
+  const searchText = search.toLowerCase().trim();
+
+  const matchesSearch =
+    !searchText ||
+    item.title?.toLowerCase().includes(searchText) ||
+    item.content?.toLowerCase().includes(searchText);
+
+  const matchesTag =
+    selectedTag === "All" ||
+    !selectedTag ||
+    item.tags?.includes(selectedTag);
+
+  const matchesSource =
+    selectedSource === "All" ||
+    !selectedSource ||
+    item.sourceType === selectedSource;
+
+  return matchesSearch && matchesTag && matchesSource;
+}); */
+
   // ==============================
   // Clear Filters
   // ==============================
@@ -161,45 +210,77 @@ const filteredKnowledge = useMemo(() => {
 
   };
 
-  const handleDelete = async (item) => {
+//   const handleDelete = async (item) => {
 
-  const confirmed =
-    window.confirm(
-      `Delete "${item.title}"?`
-    );
-
-
-  if (!confirmed) return;
+//   const confirmed =
+//     window.confirm(
+//       `Delete "${item.title}"?`
+//     );
 
 
-  try {
-
-    await deleteKnowledge(item._id);
+//   if (!confirmed) return;
 
 
-    setKnowledge((prev) =>
-      prev.filter(
-        (knowledge) =>
-          knowledge._id !== item._id
-      )
-    );
+//   try {
+
+//     await deleteKnowledge(item._id);
 
 
-  } catch (error) {
+//     setKnowledge((prev) =>
+//       prev.filter(
+//         (knowledge) =>
+//           knowledge._id !== item._id
+//       )
+//     );
 
-    console.error(error);
 
-    alert(
-      "Failed to delete knowledge"
-    );
+//   } catch (error) {
 
-  }
+//     console.error(error);
 
-};
+//     alert(
+//       "Failed to delete knowledge"
+//     );
+
+//   }
+
+// };
 
   // ==============================
   // Render
   // ==============================
+
+const handleDeleteKnowledge = async (id) => {
+  const confirmed = window.confirm(
+    "Are you sure you want to delete this knowledge?"
+  );
+
+  if (!confirmed) return;
+
+  try {
+    setDeletingId(id);
+
+    await deleteKnowledge(id);
+
+    setKnowledge((prev) =>
+      prev.filter((item) => item._id !== id)
+    );
+
+  } catch (error) {
+    console.error(
+      "Delete failed:",
+      error.response?.data || error.message
+    );
+
+    alert(
+      error.response?.data?.message ||
+      "Failed to delete knowledge"
+    );
+  } finally {
+    setDeletingId(null);
+  }
+};
+
 
   return (
 
@@ -240,7 +321,7 @@ const filteredKnowledge = useMemo(() => {
 
           <button
   className="primary-button"
-  onClick={() => setShowModal(true)}
+  onClick={() => setShowEditModal(true)}
 >
   + Add Knowledge
 </button>
@@ -534,20 +615,71 @@ const filteredKnowledge = useMemo(() => {
 
           <section className="knowledge-grid">
 
-            {filteredKnowledge.map(
-              (item) => (
-<KnowledgeCard
-  key={item._id}
-  item={item}
+        {filteredKnowledge.map((item) => (
+  <div className="knowledge-card" key={item._id}>
 
-  onEdit={(item) =>
-    setEditingItem(item)
-  }
+    <div className="knowledge-card-header">
+      <div>
+        <h3>{item.title}</h3>
 
-  onDelete={handleDelete}
-/>
-              )
-            )}
+        <span className="knowledge-source">
+          {item.sourceType || "article"}
+        </span>
+      </div>
+
+      <div className="knowledge-actions">
+        <button
+          className="edit-btn"
+          onClick={() =>{ handleEditKnowledge(item); setShowEditModal(true);}   }
+        >
+          Edit
+        </button>
+
+        <button
+          className="delete-btn"
+          onClick={() => handleDeleteKnowledge(item._id)}
+        >
+          Delete
+        </button>
+      </div>
+    </div>
+
+    <p className="knowledge-content">
+      {item.content?.length > 180
+        ? `${item.content.substring(0, 180)}...`
+        : item.content}
+    </p>
+
+    {item.tags?.length > 0 && (
+      <div className="knowledge-tags">
+        {item.tags.map((tag, index) => (
+          <span key={index} className="knowledge-tag">
+            #{tag}
+          </span>
+        ))}
+      </div>
+    )}
+
+    <div className="knowledge-card-footer">
+      <span>
+        {item.createdAt
+          ? new Date(item.createdAt).toLocaleDateString()
+          : ""}
+      </span>
+
+      {item.sourceUrl && (
+        <a
+          href={item.sourceUrl}
+          target="_blank"
+          rel="noopener noreferrer"
+        >
+          View Source
+        </a>
+      )}
+    </div>
+
+  </div>
+))}
 
           </section>
 
@@ -558,7 +690,7 @@ const filteredKnowledge = useMemo(() => {
             Add Knowledge Modal
         ======================= */}
 
-        {showModal && (
+        {showEditModal && (
 
           <AddKnowledgeModal
             onClose={() =>
@@ -578,30 +710,21 @@ const filteredKnowledge = useMemo(() => {
         )}
 
 
-        {editingItem && (
-
+       {showEditModal && editingItem && (
   <EditKnowledgeModal
-
-    item={editingItem}
-
-    onClose={() =>
-      setEditingItem(null)
-    }
-
-    onUpdated={(updatedItem) => {
-
-      setKnowledge((prev) =>
-        prev.map((item) =>
-          item._id === updatedItem._id
-            ? updatedItem
-            : item
-        )
-      );
-
+    knowledge={editingItem}
+    onClose={() => {
+      setShowEditModal(false);
+      setEditingItem(null);
     }}
+    onSaved={async () => {
+      setShowEditModal(false);
+      setEditingItem(null);
 
+      const data = await getKnowledge();
+      setKnowledge(data || []);
+    }}
   />
-
 )}
 
       </main>
