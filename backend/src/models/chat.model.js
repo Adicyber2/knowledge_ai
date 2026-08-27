@@ -1,5 +1,15 @@
 import mongoose from "mongoose";
 
+const sourceSchema = new mongoose.Schema(
+  {
+    knowledgeId: String,
+    title: String,
+    sourceType: String,
+    sourceUrl: String,
+  },
+  { _id: false }
+);
+
 const messageSchema = new mongoose.Schema(
   {
     role: {
@@ -11,6 +21,11 @@ const messageSchema = new mongoose.Schema(
     content: {
       type: String,
       required: true,
+    },
+
+    sources: {
+      type: [sourceSchema],
+      default: [],
     },
   },
   {
@@ -35,13 +50,13 @@ const chatSchema = new mongoose.Schema(
       type: [messageSchema],
       default: [],
     },
-    
+
     knowledgeIds: [
-  {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: "Knowledge",
-  },
-],
+      {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "Knowledge",
+      },
+    ],
   },
   {
     timestamps: true,

@@ -1,79 +1,74 @@
-import { useState ,useEffect} from "react";
-
-import {
-  updateKnowledge,
-} from "../service/knowledgeService";
+import { useState, useEffect } from "react";
+import { updateKnowledge } from "../service/knowledgeService";
+import "./AddKnowledgeModal.css";
 
 
 const EditKnowledgeModal = ({
-  item,
+  knowledge,
   onClose,
-  onUpdated,
+  onSaved,
 }) => {
 
- const [formData, setFormData] = useState({
-  title: "",
-  content: "",
-  sourceType: "text",
-  sourceUrl: "",
-});
-
-const [loading, setLoading] = useState(false);
-
-
-  const [error, setError] =
-    useState("");
-
-
-    useEffect(() => {
-  if (!knowledge) return;
-
-  setFormData({
-    title: knowledge.title || "",
-    content: knowledge.content || "",
-    sourceType: knowledge.sourceType || "text",
-    sourceUrl: knowledge.sourceUrl || "",
+  const [formData, setFormData] = useState({
+    title: "",
+    content: "",
+    sourceType: "note",
+    sourceUrl: "",
   });
-}, [knowledge]);
+
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
 
 
- const handleChange = (e) => {
-  const { name, value } = e.target;
+  // Pre-fill form with existing knowledge data
+  useEffect(() => {
+    if (!knowledge) return;
 
-  setFormData((prev) => ({
-    ...prev,
-    [name]: value,
-  }));
-};
+    setFormData({
+      title: knowledge.title || "",
+      content: knowledge.content || "",
+      sourceType: knowledge.sourceType || "note",
+      sourceUrl: knowledge.sourceUrl || "",
+    });
+  }, [knowledge]);
+
+
+  const handleChange = (e) => {
+    const { name, value } = e.target;
+    setFormData((prev) => ({ ...prev, [name]: value }));
+  };
 
 
   const handleSubmit = async (e) => {
-  e.preventDefault();
+    e.preventDefault();
+    setError("");
 
-  try {
-    setLoading(true);
+    if (!formData.title.trim() || !formData.content.trim()) {
+      setError("Title and content are required.");
+      return;
+    }
 
-    await updateKnowledge(
-      knowledge._id,
-      formData
-    );
+    try {
+      setLoading(true);
 
-    onSaved();
+      await updateKnowledge(knowledge._id, formData);
 
-  } catch (error) {
-    console.error(
-      "Update failed:",
-      error.response?.data || error.message
-    );
+      onSaved();
 
-    alert(
-      error.response?.data?.message ||
-      "Failed to update knowledge"
-    );
-  } finally {
-    setLoading(false);
-  }
-};
+    } catch (err) {
+      console.error(
+        "Update failed:",
+        err.response?.data || err.message
+      );
+
+      setError(
+        err.response?.data?.message ||
+        "Failed to update knowledge"
+      );
+    } finally {
+      setLoading(false);
+    }
+  };
 
 
   return (
@@ -81,27 +76,20 @@ const [loading, setLoading] = useState(false);
     <div
       className="modal-backdrop"
       onMouseDown={(e) => {
-
-        if (
-          e.target === e.currentTarget
-        ) {
-          onClose();
-        }
-
+        if (e.target === e.currentTarget && !loading) onClose();
       }}
     >
 
       <div
         className="knowledge-modal"
-        onMouseDown={(e) =>
-          e.stopPropagation()
-        }
+        onMouseDown={(e) => e.stopPropagation()}
       >
+
+        {/* Header */}
 
         <div className="modal-header">
 
           <div>
-
             <span className="modal-eyebrow">
               KNOWLEDGE
             </span>
@@ -113,7 +101,6 @@ const [loading, setLoading] = useState(false);
             <p>
               Update your saved knowledge.
             </p>
-
           </div>
 
 
@@ -121,6 +108,7 @@ const [loading, setLoading] = useState(false);
             className="modal-close"
             onClick={onClose}
             type="button"
+            disabled={loading}
           >
             ×
           </button>
@@ -128,14 +116,16 @@ const [loading, setLoading] = useState(false);
         </div>
 
 
-        {error && (
+        {/* Error */}
 
+        {error && (
           <div className="auth-error">
             {error}
           </div>
-
         )}
 
+
+        {/* Form */}
 
         <form
           className="knowledge-form"
@@ -143,88 +133,56 @@ const [loading, setLoading] = useState(false);
         >
 
           <div className="form-group">
-
-            <label>
-              Title
-            </label>
-
+            <label>Title</label>
             <input
               name="title"
-              value={form.title}
+              value={formData.title}
               onChange={handleChange}
+              placeholder="Knowledge title"
               required
             />
-
           </div>
 
 
           <div className="form-row">
 
             <div className="form-group">
-
-              <label>
-                Source Type
-              </label>
-
+              <label>Source Type</label>
               <select
                 name="sourceType"
-                value={form.sourceType}
+                value={formData.sourceType}
                 onChange={handleChange}
               >
-
-                <option value="note">
-                  Note
-                </option>
-
-                <option value="article">
-                  Article
-                </option>
-
-                <option value="youtube">
-                  YouTube
-                </option>
-
-                <option value="pdf">
-                  PDF
-                </option>
-
+                <option value="note">Note</option>
+                <option value="article">Article</option>
+                <option value="youtube">YouTube</option>
+                <option value="pdf">PDF</option>
               </select>
-
             </div>
 
-
             <div className="form-group">
-
-              <label>
-                Source URL
-              </label>
-
+              <label>Source URL</label>
               <input
                 name="sourceUrl"
                 type="url"
-                value={form.sourceUrl}
+                value={formData.sourceUrl}
                 onChange={handleChange}
+                placeholder="https://..."
               />
-
             </div>
 
           </div>
 
 
           <div className="form-group">
-
-            <label>
-              Content
-            </label>
-
+            <label>Content</label>
             <textarea
               name="content"
-              value={form.content}
+              value={formData.content}
               onChange={handleChange}
               rows={8}
               required
             />
-
           </div>
 
 
@@ -245,11 +203,7 @@ const [loading, setLoading] = useState(false);
               className="primary-button"
               disabled={loading}
             >
-
-              {loading
-                ? "Updating..."
-                : "Save Changes →"}
-
+              {loading ? "Updating..." : "Save Changes →"}
             </button>
 
           </div>
@@ -259,7 +213,6 @@ const [loading, setLoading] = useState(false);
       </div>
 
     </div>
-
   );
 };
 

@@ -31,13 +31,15 @@ export const getChat = async (chatId) => {
 export const addChatMessage = async (
   chatId,
   role,
-  content
+  content,
+  sources = []
 ) => {
   const response = await api.post(
     `/chats/${chatId}/messages`,
     {
       role,
       content,
+      sources,
     }
   );
 

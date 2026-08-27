@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useAuth } from "../context/AuthContext";
-import { getDashboardData } from "../service/dashboardService";
+import { getDashboardData,getKnowledgeActivity } from "../service/dashboardService";
 import { useNavigate } from "react-router-dom";
 
 import Sidebar from "../components/Sidebar";
@@ -20,53 +20,95 @@ const Dashboard = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
+  const [activity, setActivity] = useState([]);
+
 
   /* ================= LOAD KNOWLEDGE ================= */
 
-  useEffect(() => {
+ useEffect(() => {
 
-    if (authLoading || !user) {
-      return;
+  if (authLoading || !user) {
+    return;
+  }
+
+  const loadDashboard = async () => {
+
+    try {
+
+      setLoading(true);
+      setError("");
+
+      // Dashboard / Knowledge data
+      const data = await getDashboardData();
+
+      setKnowledge(
+        Array.isArray(data)
+          ? data
+          : []
+      );
+
+      // Activity data
+      const activityData =
+        await getKnowledgeActivity();
+
+      console.log(
+        "🔥 FRONTEND ACTIVITY:",
+        activityData
+      );
+
+      setActivity(
+        Array.isArray(activityData)
+          ? activityData
+          : []
+      );
+
+    } catch (error) {
+
+      console.error(
+        "Failed to load dashboard:",
+        error.response?.data ||
+        error.message
+      );
+
+      setError(
+        error.response?.data?.message ||
+        "Failed to load dashboard data."
+      );
+
+    } finally {
+
+      setLoading(false);
+
     }
+  };
 
-    const loadDashboard = async () => {
+  loadDashboard();
 
-      try {
+}, [authLoading, user]);
 
-        setLoading(true);
-        setError("");
 
-        const data = await getDashboardData();
+//   const fetchActivity = async () => {
+//   try {
+//     const token = localStorage.getItem("token");
 
-        setKnowledge(
-          Array.isArray(data)
-            ? data
-            : []
-        );
+//     const res = await axios.get(
+//       `${API_URL}/api/knowledge/activity`,
+//       {
+//         headers: {
+//           Authorization: `Bearer ${token}`,
+//         },
+//       }
+//     );
 
-      } catch (error) {
+//     setActivity(res.data);
 
-        console.error(
-          "Failed to load dashboard:",
-          error.response?.data ||
-          error.message
-        );
-
-        setError(
-          error.response?.data?.message ||
-          "Failed to load dashboard data."
-        );
-
-      } finally {
-
-        setLoading(false);
-
-      }
-    };
-
-    loadDashboard();
-
-  }, [authLoading, user]);
+//   } catch (error) {
+//     console.error(
+//       "Activity fetch error:",
+//       error
+//     );
+//   }
+// };
 
 
   /* ================= DYNAMIC COUNTS ================= */
@@ -110,6 +152,20 @@ const Dashboard = () => {
         item.sourceType === "pdf"
     ).length;
 
+
+    const totalTags = [
+  ...new Set(
+    knowledge.flatMap(
+      (item) => item.tags || []
+    )
+  ),
+].length;
+
+
+const aiProcessedCount =
+  knowledge.filter(
+    (item) => item.aiProcessed === true
+  ).length;
 
   /* ================= RECENT KNOWLEDGE ================= */
 
@@ -371,6 +427,48 @@ const Dashboard = () => {
           </div>
 
 
+          <div className="premium-stat">
+
+  <span>
+    🏷️
+  </span>
+
+  <div>
+    <h3>
+      Total Tags
+    </h3>
+
+    <h2>
+      {loading
+        ? "..."
+        : totalTags}
+    </h2>
+  </div>
+
+</div>
+
+
+<div className="premium-stat">
+
+  <span>
+    🤖
+  </span>
+
+  <div>
+    <h3>
+      AI Processed
+    </h3>
+
+    <h2>
+      {loading
+        ? "..."
+        : aiProcessedCount}
+    </h2>
+  </div>
+
+</div>
+
+
         </section>
 
 
@@ -383,76 +481,97 @@ const Dashboard = () => {
 
           {/* ================= ACTIVITY ================= */}
 
-          <div className="activity-card">
+         <div className="activity-card">
 
-            <div className="section-heading">
+  <div className="section-heading">
 
-              <div>
+    <div>
+      <h2>Knowledge Activity</h2>
 
-                <h2>
-                  Knowledge Activity
-                </h2>
+      <p>
+        Your activity over the last 7 days.
+      </p>
+    </div>
+
+    <select>
+      <option>Last 7 days</option>
+      <option>Last 30 days</option>
+    </select>
+
+  </div>
 
 
-                <p>
-                  Your activity over the last
-                  30 days.
-                </p>
+  {/* Activity Chart */}
 
-              </div>
+  <div className="activity-chart">
 
+    {activity.length === 0 ? (
 
-              <select>
+      <div className="chart-empty">
+        No activity yet
+      </div>
 
-                <option>
-                  Last 30 days
-                </option>
+    ) : (
 
-                <option>
-                  Last 7 days
-                </option>
+      <div className="bars">
 
-              </select>
+        {activity.map((item) => {
+
+          const max = Math.max(
+            ...activity.map(
+              (x) => x.count
+            ),
+            1
+          );
+
+          const height =
+            (item.count / max) * 100;
+
+          return (
+
+            <div
+              className="bar-wrapper"
+              key={item.date}
+              title={`${item.date}: ${item.count} item(s)`}
+            >
+
+              <div
+                className="bar"
+                style={{
+                  height: `${Math.max(
+                    height,
+                    item.count > 0
+                      ? 8
+                      : 2
+                  )}%`,
+                }}
+              />
+
+              <span>
+                {new Date(
+                  item.date + "T00:00:00"
+                ).toLocaleDateString(
+                  "en-IN",
+                  {
+                    day: "2-digit",
+                    month: "short",
+                  }
+                )}
+              </span>
 
             </div>
 
+          );
 
-            {/* Existing chart preserved */}
+        })}
 
-            <div className="fake-chart">
+      </div>
 
-              <div className="chart-line">
-                ╱╲___╱╲__╱╲___╱╲__
-              </div>
+    )}
 
+  </div>
 
-              <div className="chart-labels">
-
-                <span>
-                  Jul 15
-                </span>
-
-                <span>
-                  Jul 22
-                </span>
-
-                <span>
-                  Jul 29
-                </span>
-
-                <span>
-                  Aug 05
-                </span>
-
-                <span>
-                  Aug 14
-                </span>
-
-              </div>
-
-            </div>
-
-          </div>
+</div>
 
 
           {/* ================= AI ================= */}

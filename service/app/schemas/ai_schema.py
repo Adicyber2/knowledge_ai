@@ -10,3 +10,8 @@ class AIContentResult(BaseModel):
     tags: list[str] = Field(
         description="Relevant tags for the content"
     )
+
+    topics: list[str] = Field(
+        default=[],
+        description="Main topics covered in the content"
+    )

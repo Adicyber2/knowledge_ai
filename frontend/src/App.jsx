@@ -9,7 +9,8 @@ import Dashboard from "./pages/Dashboard";
 import Login from "./pages/Login";
 import Register from "./pages/Register";
 import Knowledge from "./pages/Knowledge";
-import AIChat from "./pages/AIChat";
+import AiChat from "./pages/AiChat";
+import Graph from "./pages/Graph";
 import ProtectedRoute from "./components/ProtectedRoute";
 
 function App() {
@@ -40,6 +41,33 @@ function App() {
         />
 
         <Route
+          path="/knowledge"
+          element={
+            <ProtectedRoute>
+              <Knowledge />
+            </ProtectedRoute>
+          }
+        />
+
+        <Route
+          path="/ai-chat"
+          element={
+            <ProtectedRoute>
+              <AiChat />
+            </ProtectedRoute>
+          }
+        />
+
+        <Route
+          path="/graph"
+          element={
+            <ProtectedRoute>
+              <Graph />
+            </ProtectedRoute>
+          }
+        />
+
+        <Route
           path="*"
           element={
             <Navigate
@@ -48,22 +76,6 @@ function App() {
             />
           }
         />
-
-        <Route
-  path="/knowledge"
-  element={
-    <ProtectedRoute>
-      <Knowledge />
-    </ProtectedRoute>
-  }
-/>
-
-<Route
-  path="/ai-chat"
-  element={<ProtectedRoute>
-    <AIChat />
-  </ProtectedRoute>}
-/>
 
       </Routes>
 

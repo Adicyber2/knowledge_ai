@@ -526,3 +526,129 @@
     font-size: 13px;
   }
 }
+
+
+/* ================================
+   IMPORT TABS
+================================ */
+
+.import-tabs {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin-bottom: 20px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.import-tab {
+  padding: 7px 13px;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  background: transparent;
+  color: #64748b;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: 0.2s;
+  white-space: nowrap;
+}
+
+.import-tab:hover {
+  border-color: #a5b4fc;
+  color: #4f46e5;
+  background: #eef2ff;
+}
+
+.import-tab-active {
+  border-color: #6366f1;
+  background: #eef2ff;
+  color: #4f46e5;
+  font-weight: 600;
+}
+
+
+/* ================================
+   IMPORT SUCCESS MESSAGE
+================================ */
+
+.import-success {
+  margin-top: 12px;
+  padding: 12px;
+  border: 1px solid #bbf7d0;
+  border-radius: 10px;
+  background: rgba(187, 247, 208, 0.2);
+  color: #15803d;
+  font-size: 14px;
+  font-weight: 500;
+}
+
+
+/* ================================
+   IMPORT HINT TEXT
+================================ */
+
+.import-hint {
+  display: block;
+  margin-top: 7px;
+  color: #94a3b8;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+
+/* ================================
+   FILE DROP ZONE
+================================ */
+
+.file-drop-zone {
+  border: 2px dashed #cbd5e1;
+  border-radius: 12px;
+  background: #f8fafc;
+  cursor: pointer;
+  transition: 0.2s;
+  overflow: hidden;
+}
+
+.file-drop-zone:hover {
+  border-color: #6366f1;
+  background: #eef2ff;
+}
+
+.file-placeholder {
+  padding: 36px 24px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  text-align: center;
+}
+
+.file-placeholder p {
+  color: #475569;
+  font-size: 14px;
+  font-weight: 500;
+  margin: 0;
+}
+
+.file-placeholder small {
+  color: #94a3b8;
+  font-size: 12px;
+}
+
+.file-selected {
+  padding: 16px 20px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 14px;
+  color: #1e293b;
+  font-weight: 500;
+}
+
+.file-size {
+  margin-left: auto;
+  color: #64748b;
+  font-size: 12px;
+  font-weight: 400;
+}

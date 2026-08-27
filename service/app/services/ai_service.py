@@ -38,7 +38,7 @@ Title:
 Content:
 {content}
 
-Generate a short summary and 3 to 6 relevant tags.
+Generate a short summary and 3 to 6 relevant tags and 2 to 4 topics.
 """
 
     response = client.models.generate_content(
@@ -54,32 +54,31 @@ Generate a short summary and 3 to 6 relevant tags.
 
 
     # -------------------------
-    # 2. Generate Embedding
+    # 2. Generate Embedding + Store Vector
+    # Only when we have a knowledge_id and user_id
+    # (skip for analyze-only calls)
     # -------------------------
 
-    embedding = generate_embedding(content)
+    if knowledge_id and user_id:
+
+        embedding = generate_embedding(content)
+
+        store_embedding(
+            knowledge_id=knowledge_id,
+            text=content,
+            embedding=embedding,
+            metadata={
+                "knowledgeId": knowledge_id,
+                "userId": user_id,
+                "title": title,
+                "sourceType": source_type or "note",
+                "sourceUrl": source_url or ""
+            }
+        )
 
 
     # -------------------------
-    # 3. Store Vector
+    # 3. Return AI Result
     # -------------------------
 
-    store_embedding(
-        knowledge_id=knowledge_id,
-        text=content,
-        embedding=embedding,
-        metadata={
-            "knowledgeId": knowledge_id,
-            "userId": user_id,
-            "title": title,
-            "sourceType": source_type,
-            "sourceUrl": source_url or ""
-        }
-    )
-
-
-    # -------------------------
-    # 4. Return AI Result
-    # -------------------------
-
-    return result
+    return result

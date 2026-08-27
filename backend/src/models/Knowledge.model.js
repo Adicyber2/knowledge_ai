@@ -19,18 +19,24 @@ const knowledgeSchema = new mongoose.Schema(
     },
 
     sourceType: {
-  type: String,
-  enum: [
-    "note",
-    "article",
-    "youtube",
-    "pdf"
-  ],
-  default: "note",
-},
+      type: String,
+      enum: ["note", "article", "youtube", "pdf", "image"],
+      default: "note",
+    },
 
     sourceUrl: {
       type: String,
+      default: "",
+    },
+
+    fileUrl: {
+      type: String,
+      default: "",
+    },
+
+    imageUrl: {
+      type: String,
+      default: "",
     },
 
     summary: {
@@ -41,17 +47,25 @@ const knowledgeSchema = new mongoose.Schema(
     tags: [
       {
         type: String,
-      }
+      },
     ],
+
+    topics: [
+      {
+        type: String,
+      },
+    ],
+
+    aiProcessed: {
+      type: Boolean,
+      default: false,
+    },
   },
   {
     timestamps: true,
   }
 );
 
-const Knowledge = mongoose.model(
-  "Knowledge",
-  knowledgeSchema
-);
+const Knowledge = mongoose.model("Knowledge", knowledgeSchema);
 
 export default Knowledge;

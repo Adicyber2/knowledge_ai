@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>AI Knowledge Vault Companion</title>
+  <link rel="stylesheet" href="popup.css" />
+</head>
+<body>
+
+  <!-- Header -->
+  <div class="header">
+    <div class="logo-icon">✦</div>
+    <div class="logo-text">
+      <strong>Knowledge Vault</strong>
+      <small>Save to your second brain</small>
+    </div>
+  </div>
+
+
+  <!-- NOT LOGGED IN STATE -->
+  <div id="not-logged-in" class="auth-section">
+    <label>Email</label>
+    <input type="email" id="email" placeholder="you@example.com" />
+
+    <label>Password</label>
+    <input type="password" id="password" placeholder="••••••••" />
+
+    <button class="save-btn" id="login-btn" style="width:100%; justify-content:center; background: linear-gradient(135deg, #8b5cf6, #6366f1); border-color: transparent; color: white; font-weight: 600;">
+      Sign In →
+    </button>
+
+    <div id="auth-status" class="status-msg"></div>
+  </div>
+
+
+  <!-- LOGGED IN STATE -->
+  <div id="logged-in">
+    <div class="content">
+
+      <!-- Page info -->
+      <div class="page-info">
+        <div class="page-title" id="page-title">Loading...</div>
+        <div class="page-url" id="page-url">Loading...</div>
+      </div>
+
+      <!-- Optional Personal Note -->
+      <div class="note-input-group">
+        <label>Personal Note (Optional)</label>
+        <textarea id="user-note" rows="2" placeholder="Add key takeaways or personal notes..."></textarea>
+      </div>
+
+      <!-- Status -->
+      <div id="status-msg" class="status-msg"></div>
+
+      <!-- Save options -->
+      <div class="save-options">
+
+        <button class="save-btn" id="save-url-btn">
+          <span class="icon">🌐</span>
+          <div>
+            Save Current Webpage / Article
+            <small>Extracts article & runs AI processing</small>
+          </div>
+        </button>
+
+        <button class="save-btn" id="save-youtube-btn" style="display:none">
+          <span class="icon">▶️</span>
+          <div>
+            Save YouTube Video
+            <small>Extracts transcript & runs AI summary</small>
+          </div>
+        </button>
+
+        <button class="save-btn" id="save-selection-btn">
+          <span class="icon">✂️</span>
+          <div>
+            Save Selected Text
+            <small>Save highlighted text as note</small>
+          </div>
+        </button>
+
+      </div>
+    </div>
+
+    <div class="footer">
+      <a href="http://localhost:5173/knowledge" target="_blank">Open Vault ↗</a>
+      <button class="logout-btn" id="logout-btn">Sign out</button>
+    </div>
+  </div>
+
+
+  <script src="popup.js"></script>
+</body>
+</html>

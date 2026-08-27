@@ -80,7 +80,7 @@ export const getChat = async (req, res) => {
 // ADD MESSAGE
 export const addMessage = async (req, res) => {
   try {
-    const { role, content } = req.body;
+    const { role, content, sources = [] } = req.body;
 
     if (!role || !content) {
       return res.status(400).json({
@@ -102,9 +102,10 @@ export const addMessage = async (req, res) => {
     chat.messages.push({
       role,
       content,
+      sources,
     });
 
-    // First user message → chat title
+    // First user message -> chat title
     if (
       role === "user" &&
       chat.title === "New Chat"
