@@ -8,7 +8,7 @@ client = chromadb.PersistentClient(
 )
 
 collection = client.get_or_create_collection(
-    name="knowledge"
+    name="knowledge_v2"
 )
 
 
