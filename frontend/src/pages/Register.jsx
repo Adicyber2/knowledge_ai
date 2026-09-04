@@ -1,11 +1,17 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate, Link } from "react-router-dom";
 
 import { useAuth } from "../context/AuthContext";
 
 const Register = () => {
   const navigate = useNavigate();
-  const { register } = useAuth();
+  const { user, loading: authLoading, register } = useAuth();
+
+  useEffect(() => {
+    if (!authLoading && user) {
+      navigate("/dashboard", { replace: true });
+    }
+  }, [user, authLoading, navigate]);
 
   const [form, setForm] = useState({
     name: "",

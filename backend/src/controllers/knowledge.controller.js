@@ -1,17 +1,51 @@
 import mongoose from "mongoose";
 
 import Knowledge from "../models/Knowledge.model.js";
+import KnowledgeRelationship from "../models/KnowledgeRelationship.model.js";
 import axios from "axios";
 import {
   analyzeKnowledge,
   embedKnowledge,
+  buildKnowledgeRelationships,
 } from "../services/aiService.js";
+import { uploadFileToImageKit } from "../services/imagekit.service.js";
+
+
+// ============================================================
+// HELPERS
+// ============================================================
+
+// Generic titles that AI might produce — we prefer AI title but fall back
+const GENERIC_TITLE_PATTERNS = [
+  /^article$/i, /^web page$/i, /^webpage$/i, /^website$/i,
+  /^google search$/i, /^untitled$/i, /^unknown$/i, /^document$/i,
+  /^content$/i, /^note$/i, /^reading$/i, /^link$/i, /^page$/i,
+];
+
+function isGenericTitle(title) {
+  if (!title || !title.trim()) return true;
+  const t = title.trim().toLowerCase();
+  return GENERIC_TITLE_PATTERNS.some((p) => p.test(t)) || t.length < 5;
+}
+
+/**
+ * Choose the best title: prefer AI-generated title unless it's generic.
+ */
+function chooseBestTitle(aiTitle, originalTitle) {
+  if (aiTitle && !isGenericTitle(aiTitle)) {
+    return aiTitle.trim();
+  }
+  return (originalTitle || "").trim() || "Saved Knowledge";
+}
 
 
 // ============================================================
 // SHARED: AI PROCESSING PIPELINE
 // Input text → AI analysis → save to MongoDB → embed to vector DB
+//                         → async relationship building
 // ============================================================
+
+const MIN_CONTENT_LENGTH = 15;
 
 const processAndSaveKnowledge = async ({
   userId,
@@ -23,46 +57,127 @@ const processAndSaveKnowledge = async ({
   imageUrl,
 }) => {
 
-  // 1. Save to MongoDB first (without AI data)
+  // 1. Save to MongoDB first — set status to 'analyzing'
+  const trimmedContent = (content || "").trim();
+  // If user didn't provide a title, set a placeholder; AI will replace it
+  const trimmedTitle = (title || "").trim() || "Analyzing...";
+
+  const isShort = trimmedContent.length < MIN_CONTENT_LENGTH;
+
   const knowledge = await Knowledge.create({
     userId,
-    title: title.trim(),
-    content: content.trim(),
+    title: trimmedTitle,
+    content: trimmedContent,
     sourceType: sourceType || "note",
     sourceUrl: sourceUrl || "",
     fileUrl: fileUrl || imageUrl || "",
     imageUrl: imageUrl || fileUrl || "",
+    aiAnalysisStatus: isShort ? "completed" : "analyzing",
+    aiProcessed: isShort,
+    aiAnalyzedAt: isShort ? new Date() : undefined,
+    // 30-day expiry (default set by schema, but explicit here for clarity)
+    expiresAt: (() => { const d = new Date(); d.setDate(d.getDate() + 30); return d; })(),
+    isPermanent: false,
   });
 
-  // 2. AI Analysis + Embedding (non-blocking on failure)
-  try {
-
-    const aiData = await analyzeKnowledge({
-      title: knowledge.title,
-      content: knowledge.content,
-    });
-
-    knowledge.summary = aiData.summary || "";
-    knowledge.tags = Array.isArray(aiData.tags) ? aiData.tags : [];
-    knowledge.topics = Array.isArray(aiData.topics) ? aiData.topics : [];
-    knowledge.aiProcessed = true;
-
-    await knowledge.save();
-
-    // 3. Embed into vector DB
-    await embedKnowledge({
-      knowledgeId: knowledge._id.toString(),
-      userId: userId.toString(),
-      title: knowledge.title,
-      content: knowledge.content,
-      sourceType: knowledge.sourceType,
-      sourceUrl: knowledge.sourceUrl,
-    });
-
-  } catch (aiError) {
-    console.error("AI/embedding pipeline error:", aiError.message);
-    // Knowledge is already saved — AI failure is non-fatal
+  // 2. Short content check — skip AI call if content is insufficient
+  if (isShort) {
+    console.log(`[AI] Content too short (${trimmedContent.length} chars) for Knowledge ${knowledge._id}. Using original title.`);
+    return knowledge;
   }
+
+  // 3. AI Analysis + Embedding (non-blocking async)
+  setImmediate(async () => {
+    console.log("\n========================================");
+    console.log("AI ANALYSIS START");
+    console.log(`Knowledge ID: ${knowledge._id}`);
+    console.log(`User ID: ${userId}`);
+
+    try {
+      console.log("AI REQUEST SENT");
+
+      const aiData = await analyzeKnowledge({
+        title: knowledge.title,
+        content: knowledge.content,
+        sourceType: knowledge.sourceType,
+        sourceUrl: knowledge.sourceUrl,
+      });
+
+      console.log("AI RESPONSE RECEIVED");
+      console.log("AI RESULT:", {
+        title: aiData?.title,
+        summary: aiData?.summary?.substring(0, 100),
+        tags: aiData?.tags,
+      });
+
+      // Validate response
+      if (!aiData) {
+        throw new Error("AI service returned empty response");
+      }
+
+      const bestTitle = chooseBestTitle(aiData.title, knowledge.title);
+
+      console.log("MONGODB UPDATE START");
+      knowledge.title = bestTitle;
+      knowledge.summary = aiData.summary || "";
+      knowledge.category = aiData.category || "General";
+      knowledge.tags = Array.isArray(aiData.tags) ? aiData.tags : [];
+      knowledge.topics = Array.isArray(aiData.topics) ? aiData.topics : [];
+      knowledge.entities = Array.isArray(aiData.entities) ? aiData.entities : [];
+      knowledge.aiProcessed = true;
+      knowledge.aiAnalysisStatus = "completed";
+      knowledge.aiAnalyzedAt = new Date();
+      knowledge.aiAnalysisError = "";
+      knowledge.aiProvider = aiData.provider || "gemini";
+      knowledge.aiModel = aiData.model || "";
+      await knowledge.save();
+
+      console.log("MONGODB UPDATE COMPLETE");
+      console.log(`AI ANALYSIS FINISHED: "${bestTitle}"`);
+      console.log("========================================\n");
+
+      // Embed into vector DB
+      embedKnowledge({
+        knowledgeId: knowledge._id.toString(),
+        userId: userId.toString(),
+        title: bestTitle,
+        content: knowledge.content,
+        sourceType: knowledge.sourceType,
+        sourceUrl: knowledge.sourceUrl,
+      }).catch((err) => {
+        console.error("[EMBED ERROR]:", err.message);
+      });
+
+      // Build knowledge graph relationships
+      buildKnowledgeRelationships({
+        userId,
+        newKnowledgeId: knowledge._id,
+        newTitle: bestTitle,
+        newSummary: aiData.summary || "",
+        newTags: Array.isArray(aiData.tags) ? aiData.tags : [],
+        newTopics: Array.isArray(aiData.topics) ? aiData.topics : [],
+        newEntities: Array.isArray(aiData.entities) ? aiData.entities : [],
+        content: knowledge.content,
+        Knowledge,
+      }).catch((err) => {
+        console.error("[GRAPH ERROR]:", err.message);
+      });
+
+    } catch (aiError) {
+      console.error("AI ANALYSIS FAILED for Knowledge:", knowledge._id);
+      console.error("ERROR REASON:", aiError.message);
+      console.log("========================================\n");
+
+      try {
+        knowledge.aiAnalysisStatus = "failed";
+        knowledge.aiAnalysisError = aiError.message || "AI Analysis failed";
+        knowledge.aiProcessed = false;
+        await knowledge.save();
+      } catch (saveErr) {
+        console.error("Failed to update status to failed:", saveErr.message);
+      }
+    }
+  });
 
   return knowledge;
 };
@@ -81,24 +196,26 @@ export const createKnowledge = async (req, res) => {
       content,
       sourceType,
       sourceUrl,
+      fileUrl,
+      imageUrl,
     } = req.body;
 
 
-    if (!title?.trim() || !content?.trim()) {
-
+    if (!content?.trim()) {
       return res.status(400).json({
         success: false,
-        message: "Title and content are required",
+        message: "Content is required",
       });
-
     }
 
     const knowledge = await processAndSaveKnowledge({
       userId: req.userId,
-      title,
+      title: title || "",  // AI will generate title if empty
       content,
       sourceType: sourceType || "note",
-      sourceUrl: sourceUrl || "",
+      sourceUrl: sourceUrl || fileUrl || "",
+      fileUrl: fileUrl || imageUrl || "",
+      imageUrl: imageUrl || fileUrl || "",
     });
 
     return res.status(201).json({
@@ -193,32 +310,60 @@ export const updateKnowledge = async (req, res) => {
       });
     }
 
-    // Re-run AI analysis + re-embed
-    try {
-      const aiData = await analyzeKnowledge({
-        title: knowledge.title,
-        content: knowledge.content,
-      });
+    // Re-run AI analysis + re-embed (async)
+    setImmediate(async () => {
+      try {
+        const aiData = await analyzeKnowledge({
+          title: knowledge.title,
+          content: knowledge.content,
+          sourceType: knowledge.sourceType,
+          sourceUrl: knowledge.sourceUrl,
+        });
 
-      knowledge.summary = aiData.summary || "";
-      knowledge.tags = Array.isArray(aiData.tags) ? aiData.tags : [];
-      knowledge.topics = Array.isArray(aiData.topics) ? aiData.topics : [];
-      knowledge.aiProcessed = true;
+        const bestTitle = chooseBestTitle(aiData.title, knowledge.title);
 
-      await knowledge.save();
+        knowledge.title = bestTitle;
+        knowledge.summary = aiData.summary || "";
+        knowledge.category = aiData.category || "General";
+        knowledge.tags = Array.isArray(aiData.tags) ? aiData.tags : [];
+        knowledge.topics = Array.isArray(aiData.topics) ? aiData.topics : [];
+        knowledge.aiProcessed = true;
+        await knowledge.save();
 
-      await embedKnowledge({
-        knowledgeId: knowledge._id.toString(),
-        userId: req.userId.toString(),
-        title: knowledge.title,
-        content: knowledge.content,
-        sourceType: knowledge.sourceType,
-        sourceUrl: knowledge.sourceUrl,
-      });
+        await embedKnowledge({
+          knowledgeId: knowledge._id.toString(),
+          userId: req.userId.toString(),
+          title: bestTitle,
+          content: knowledge.content,
+          sourceType: knowledge.sourceType,
+          sourceUrl: knowledge.sourceUrl,
+        });
 
-    } catch (aiError) {
-      console.error("AI/embedding update error:", aiError.message);
-    }
+        // Delete old relationships and rebuild
+        await KnowledgeRelationship.deleteMany({
+          userId: req.userId,
+          $or: [
+            { sourceKnowledgeId: knowledge._id },
+            { targetKnowledgeId: knowledge._id },
+          ],
+        });
+
+        buildKnowledgeRelationships({
+          userId: req.userId,
+          newKnowledgeId: knowledge._id,
+          newTitle: bestTitle,
+          newSummary: aiData.summary || "",
+          newTags: Array.isArray(aiData.tags) ? aiData.tags : [],
+          newTopics: Array.isArray(aiData.topics) ? aiData.topics : [],
+          newEntities: Array.isArray(aiData.entities) ? aiData.entities : [],
+          content: knowledge.content,
+          Knowledge,
+        }).catch(() => {});
+
+      } catch (aiError) {
+        console.error("AI/embedding update error:", aiError.message);
+      }
+    });
 
     return res.status(200).json({
       success: true,
@@ -256,6 +401,15 @@ export const deleteKnowledge = async (req, res) => {
         message: "Knowledge not found",
       });
     }
+
+    // Also delete all graph relationships for this item
+    await KnowledgeRelationship.deleteMany({
+      userId: req.userId,
+      $or: [
+        { sourceKnowledgeId: id },
+        { targetKnowledgeId: id },
+      ],
+    }).catch(() => {});
 
     return res.status(200).json({
       success: true,
@@ -660,12 +814,37 @@ export const importFromPdf = async (req, res) => {
       extractedText = `Uploaded PDF Document: ${title}\n(Scanned or binary PDF document uploaded to vault)`;
     }
 
+    // Upload PDF file to ImageKit (/knowledge/pdfs/)
+    let pdfUrl = "";
+    try {
+      const cleanFileName = `pdf_${Date.now()}_${originalname.replace(/[^a-zA-Z0-9._-]/g, "_")}`;
+      pdfUrl = await uploadFileToImageKit({
+        buffer,
+        fileName: cleanFileName,
+        folder: "/knowledge/pdfs/",
+      });
+    } catch (uploadErr) {
+      console.error("[PDF IMPORT] ImageKit upload error:", uploadErr.message);
+      return res.status(500).json({
+        success: false,
+        message: uploadErr.message || "Failed to upload PDF file to ImageKit cloud storage",
+      });
+    }
+
+    if (!pdfUrl) {
+      return res.status(500).json({
+        success: false,
+        message: "ImageKit returned empty file URL for PDF upload",
+      });
+    }
+
     const knowledge = await processAndSaveKnowledge({
       userId: req.userId,
       title,
       content: extractedText.substring(0, 8000),
       sourceType: "pdf",
-      sourceUrl: "",
+      sourceUrl: pdfUrl,
+      fileUrl: pdfUrl,
     });
 
     return res.status(201).json({
@@ -867,8 +1046,335 @@ export const semanticSearch = async (req, res) => {
 
 
 // ============================================================
-// KNOWLEDGE GRAPH — HIERARCHICAL & RELATIONSHIPS
+// ANALYZE SINGLE KNOWLEDGE ITEM — manual re-trigger
+// POST /knowledge/:id/analyze
 // ============================================================
+
+export const analyzeKnowledgeById = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const knowledge = await Knowledge.findOne({
+      _id: id,
+      userId: req.userId,
+    });
+
+    if (!knowledge) {
+      return res.status(404).json({
+        success: false,
+        message: "Knowledge not found",
+      });
+    }
+
+    // Set status to analyzing
+    knowledge.aiAnalysisStatus = "analyzing";
+    knowledge.aiAnalysisError = "";
+    await knowledge.save();
+
+    console.log("\n========================================");
+    console.log("MANUAL AI RE-ANALYZE START");
+    console.log(`Knowledge ID: ${knowledge._id}`);
+    console.log(`User ID: ${req.userId}`);
+
+    // Short content check
+    if ((knowledge.content || "").trim().length < MIN_CONTENT_LENGTH) {
+      knowledge.aiProcessed = true;
+      knowledge.aiAnalysisStatus = "completed";
+      knowledge.aiAnalyzedAt = new Date();
+      await knowledge.save();
+
+      return res.status(200).json({
+        success: true,
+        data: knowledge,
+        message: "Content too short for AI analysis. Original title retained.",
+      });
+    }
+
+    // Run AI analysis
+    let aiData;
+    try {
+      console.log("AI REQUEST SENT");
+      aiData = await analyzeKnowledge({
+        title: knowledge.title,
+        content: knowledge.content,
+        sourceType: knowledge.sourceType,
+        sourceUrl: knowledge.sourceUrl,
+      });
+
+      console.log("AI RESPONSE RECEIVED:", {
+        title: aiData?.title,
+        summary: aiData?.summary?.substring(0, 100),
+        tags: aiData?.tags,
+      });
+
+      if (!aiData || !aiData.title) {
+        throw new Error("AI service returned incomplete result");
+      }
+    } catch (aiErr) {
+      console.error("[ANALYZE] AI analysis failed:", aiErr.message);
+
+      knowledge.aiAnalysisStatus = "failed";
+      knowledge.aiAnalysisError = aiErr.message || "AI Analysis failed";
+      knowledge.aiProcessed = false;
+      await knowledge.save();
+
+      return res.status(500).json({
+        success: false,
+        message: `AI analysis failed: ${aiErr.message}`,
+        error: aiErr.message,
+      });
+    }
+
+    console.log("MONGODB UPDATE START");
+    const bestTitle = chooseBestTitle(aiData.title, knowledge.title);
+
+    knowledge.title = bestTitle;
+    knowledge.summary = aiData.summary || "";
+    knowledge.category = aiData.category || "General";
+    knowledge.tags = Array.isArray(aiData.tags) ? aiData.tags : [];
+    knowledge.topics = Array.isArray(aiData.topics) ? aiData.topics : [];
+    knowledge.entities = Array.isArray(aiData.entities) ? aiData.entities : [];
+    knowledge.aiProcessed = true;
+    knowledge.aiAnalysisStatus = "completed";
+    knowledge.aiAnalyzedAt = new Date();
+    knowledge.aiAnalysisError = "";
+    await knowledge.save();
+
+    console.log("MONGODB UPDATE COMPLETE");
+    console.log(`MANUAL AI RE-ANALYZE FINISHED: "${bestTitle}"`);
+    console.log("========================================\n");
+
+    // Re-embed (async)
+    embedKnowledge({
+      knowledgeId: knowledge._id.toString(),
+      userId: req.userId.toString(),
+      title: bestTitle,
+      content: knowledge.content,
+      sourceType: knowledge.sourceType,
+      sourceUrl: knowledge.sourceUrl,
+    }).catch((err) => {
+      console.error("[ANALYZE] Re-embed error:", err.message);
+    });
+
+    // Rebuild relationships (async)
+    KnowledgeRelationship.deleteMany({
+      userId: req.userId,
+      $or: [
+        { sourceKnowledgeId: knowledge._id },
+        { targetKnowledgeId: knowledge._id },
+      ],
+    })
+      .then(() =>
+        buildKnowledgeRelationships({
+          userId: req.userId,
+          newKnowledgeId: knowledge._id,
+          newTitle: bestTitle,
+          newSummary: aiData.summary || "",
+          newTags: Array.isArray(aiData.tags) ? aiData.tags : [],
+          newTopics: Array.isArray(aiData.topics) ? aiData.topics : [],
+          newEntities: Array.isArray(aiData.entities) ? aiData.entities : [],
+          content: knowledge.content,
+          Knowledge,
+        })
+      )
+      .catch((err) => {
+        console.error("[ANALYZE] Relationship rebuild error:", err.message);
+      });
+
+    return res.status(200).json({
+      success: true,
+      data: knowledge,
+      message: "AI analysis complete",
+    });
+
+  } catch (error) {
+    console.error("Analyze Knowledge Error:", error);
+
+    return res.status(500).json({
+      success: false,
+      message: "Failed to analyze knowledge",
+      error: error.message,
+    });
+  }
+};
+
+
+// ============================================================
+// BULK ANALYZE — process all unanalyzed knowledge for this user
+// POST /knowledge/bulk-analyze
+// ============================================================
+
+export const bulkAnalyzeKnowledge = async (req, res) => {
+  try {
+    // Find items that are unanalyzed or failed
+    const unprocessed = await Knowledge.find({
+      userId: req.userId,
+      $or: [
+        { aiProcessed: false },
+        { aiAnalysisStatus: "pending" },
+        { aiAnalysisStatus: "failed" },
+      ],
+    }).limit(50);
+
+    if (unprocessed.length === 0) {
+      return res.status(200).json({
+        success: true,
+        message: "All knowledge items are already analyzed.",
+        processed: 0,
+      });
+    }
+
+    // Immediately mark them all as 'analyzing' in DB so UI updates instantly
+    const ids = unprocessed.map((item) => item._id);
+    await Knowledge.updateMany(
+      { _id: { $in: ids } },
+      { $set: { aiAnalysisStatus: "analyzing", aiAnalysisError: "" } }
+    );
+
+    // Return 202 Accepted
+    res.status(202).json({
+      success: true,
+      message: `Processing ${unprocessed.length} knowledge items in background. This may take a few minutes.`,
+      total: unprocessed.length,
+    });
+
+    // Process sequentially with delay to avoid rate limits
+    (async () => {
+      let processedCount = 0;
+
+      for (const item of unprocessed) {
+        try {
+          await new Promise((resolve) => setTimeout(resolve, 800));
+
+          // Short content check
+          if ((item.content || "").trim().length < MIN_CONTENT_LENGTH) {
+            item.aiProcessed = true;
+            item.aiAnalysisStatus = "completed";
+            item.aiAnalyzedAt = new Date();
+            await item.save();
+            processedCount++;
+            continue;
+          }
+
+          const aiData = await analyzeKnowledge({
+            title: item.title,
+            content: item.content,
+            sourceType: item.sourceType,
+            sourceUrl: item.sourceUrl,
+          });
+
+          if (!aiData || !aiData.title) {
+            throw new Error("AI service returned incomplete response");
+          }
+
+          const bestTitle = chooseBestTitle(aiData.title, item.title);
+
+          item.title = bestTitle;
+          item.summary = aiData.summary || "";
+          item.category = aiData.category || "General";
+          item.tags = Array.isArray(aiData.tags) ? aiData.tags : [];
+          item.topics = Array.isArray(aiData.topics) ? aiData.topics : [];
+          item.entities = Array.isArray(aiData.entities) ? aiData.entities : [];
+          item.aiProcessed = true;
+          item.aiAnalysisStatus = "completed";
+          item.aiAnalyzedAt = new Date();
+          item.aiAnalysisError = "";
+          await item.save();
+
+          // Embed (non-fatal)
+          embedKnowledge({
+            knowledgeId: item._id.toString(),
+            userId: req.userId.toString(),
+            title: bestTitle,
+            content: item.content,
+            sourceType: item.sourceType,
+            sourceUrl: item.sourceUrl,
+          }).catch(() => {});
+
+          // Build relationships (non-fatal)
+          buildKnowledgeRelationships({
+            userId: req.userId,
+            newKnowledgeId: item._id,
+            newTitle: bestTitle,
+            newSummary: aiData.summary || "",
+            newTags: Array.isArray(aiData.tags) ? aiData.tags : [],
+            newTopics: Array.isArray(aiData.topics) ? aiData.topics : [],
+            newEntities: Array.isArray(aiData.entities) ? aiData.entities : [],
+            content: item.content,
+            Knowledge,
+          }).catch(() => {});
+
+          processedCount++;
+          console.log(`[BULK ANALYZE] Processed ${processedCount}/${unprocessed.length}: "${bestTitle}"`);
+
+        } catch (itemErr) {
+          console.error(`[BULK ANALYZE] Failed item ${item._id}:`, itemErr.message);
+          try {
+            item.aiAnalysisStatus = "failed";
+            item.aiAnalysisError = itemErr.message || "Bulk AI Analysis failed";
+            item.aiProcessed = false;
+            await item.save();
+          } catch (e) {}
+        }
+      }
+
+      console.log(`[BULK ANALYZE] Complete. Processed ${processedCount}/${unprocessed.length} items.`);
+    })();
+
+  } catch (error) {
+    console.error("Bulk Analyze Error:", error);
+
+    return res.status(500).json({
+      success: false,
+      message: "Failed to start bulk analysis",
+      error: error.message,
+    });
+  }
+};
+
+
+// ============================================================
+// KNOWLEDGE GRAPH — Hierarchical + Persisted AI Relationships
+// ============================================================
+
+// ============================================================
+// KNOWLEDGE GRAPH — Direct semantic K2K relationships only
+// No GENERAL hub, no domain/tag intermediary nodes.
+// Nodes = Knowledge Items only.
+// Edges = AI-determined relationships (persisted) + strict Jaccard fallback for orphans.
+// ============================================================
+
+// Classify a knowledge item's primary domain from its tags/topics
+const DOMAIN_CLASSIFIERS = {
+  "Frontend": ["react", "html", "css", "javascript", "typescript", "vue", "angular", "nextjs", "tailwind", "frontend", "ui", "dom", "jsx", "svelte", "webpack", "vite", "browser"],
+  "Backend": ["node", "nodejs", "express", "python", "fastapi", "django", "flask", "java", "spring", "go", "rust", "backend", "api", "rest", "graphql", "server", "microservice"],
+  "Database": ["mongodb", "mongoose", "sql", "postgres", "mysql", "redis", "database", "nosql", "chroma", "vector database", "supabase", "firebase"],
+  "AI & ML": ["ai", "rag", "llm", "gemini", "openai", "gpt", "machine learning", "ml", "embedding", "embeddings", "vector", "ocr", "prompt", "transformer", "neural", "langchain", "chromadb"],
+  "DevOps": ["docker", "kubernetes", "ci/cd", "github actions", "devops", "nginx", "deployment", "cloud", "aws", "gcp", "azure"],
+  "Security": ["security", "auth", "oauth", "jwt", "encryption", "cybersecurity", "xss", "csrf"],
+  "Mobile": ["react native", "flutter", "ios", "android", "mobile", "expo"],
+};
+
+const classifyDomain = (tags = [], topics = []) => {
+  const allLabels = [...tags, ...topics].map((t) => (t || "").toLowerCase().trim());
+  const scores = {};
+
+  for (const [domain, keywords] of Object.entries(DOMAIN_CLASSIFIERS)) {
+    let score = 0;
+    for (const label of allLabels) {
+      for (const kw of keywords) {
+        if (label.includes(kw) || kw.includes(label)) {
+          score++;
+          break;
+        }
+      }
+    }
+    if (score > 0) scores[domain] = score;
+  }
+
+  if (Object.keys(scores).length === 0) return "General";
+  return Object.entries(scores).sort((a, b) => b[1] - a[1])[0][0];
+};
 
 export const getKnowledgeGraph = async (req, res) => {
   try {
@@ -884,158 +1390,290 @@ export const getKnowledgeGraph = async (req, res) => {
       });
     }
 
-    const nodes = [];
+    // Fetch persisted AI-determined relationships for this user
+    const aiRelationships = await KnowledgeRelationship.find({
+      userId: req.userId,
+    }).lean();
+
+    const knowledgeIdSet = new Set(knowledgeItems.map((k) => k._id.toString()));
+
+    // ---- Build Knowledge Nodes ONLY ----
+    // Each node includes domain as metadata (for color-coding), not as a graph node
+    const nodes = knowledgeItems.map((item) => {
+      const itemTags = Array.isArray(item.tags) ? item.tags : [];
+      const itemTopics = Array.isArray(item.topics) ? item.topics : [];
+      const domain = classifyDomain(itemTags, itemTopics);
+
+      return {
+        id: `k-${item._id}`,
+        label: item.title,                // AI-generated title shown in graph
+        type: "knowledge",
+        knowledgeId: item._id.toString(),
+        domain,                           // Used for node color-coding only (not a graph node)
+        sourceType: item.sourceType || "note",
+        sourceUrl: item.sourceUrl || "",
+        summary: item.summary || (item.content ? item.content.substring(0, 150) : ""),
+        tags: itemTags,
+        topics: itemTopics,
+        aiProcessed: item.aiProcessed || false,
+        createdAt: item.createdAt,
+      };
+    });
+
+    // ---- Build Direct K2K Edges from AI Relationships ----
     const edges = [];
-    const nodeSet = new Set();
     const edgeSet = new Set();
 
-    const addNode = (node) => {
-      if (!nodeSet.has(node.id)) {
-        nodeSet.add(node.id);
-        nodes.push(node);
-      }
-    };
-
     const addEdge = (edge) => {
-      const key = `${edge.from}->${edge.to}:${edge.relationship}`;
+      // Deduplicate: use canonical (smaller-id first) key to prevent A→B and B→A as separate edges
+      const [lo, hi] = [edge.from, edge.to].sort();
+      const key = `${lo}<->${hi}:${edge.relationship}`;
       if (!edgeSet.has(key)) {
         edgeSet.add(key);
         edges.push(edge);
       }
     };
 
-    // Domain classifier
-    const domainMap = {
-      FRONTEND: ["react", "html", "css", "javascript", "js", "ts", "typescript", "vue", "angular", "tailwind", "ui", "frontend", "web", "nextjs", "vite"],
-      BACKEND: ["node", "nodejs", "express", "python", "fastapi", "django", "java", "spring", "backend", "api", "rest", "graphql", "server"],
-      DATABASE: ["mongodb", "mongoose", "sql", "postgres", "postgresql", "redis", "database", "db", "chroma", "vector"],
-      "AI & ML": ["ai", "rag", "llm", "gemini", "openai", "machine learning", "ml", "embeddings", "vector", "ocr", "prompt"],
-    };
+    for (const rel of aiRelationships) {
+      const sourceId = rel.sourceKnowledgeId.toString();
+      const targetId = rel.targetKnowledgeId.toString();
 
-    const getDomainForTag = (tag) => {
-      const lower = (tag || "").toLowerCase().trim();
-      for (const [domain, keywords] of Object.entries(domainMap)) {
-        if (keywords.some((k) => lower.includes(k))) {
-          return domain;
-        }
-      }
-      return "GENERAL";
-    };
+      // Only add edge if BOTH nodes belong to this user
+      if (!knowledgeIdSet.has(sourceId) || !knowledgeIdSet.has(targetId)) continue;
 
-    const domainsUsed = new Set();
-
-    knowledgeItems.forEach((item) => {
-      const knId = `k-${item._id}`;
-      const itemTags = Array.isArray(item.tags) ? item.tags : [];
-      const itemTopics = Array.isArray(item.topics) ? item.topics : [];
-      const allLabels = [...new Set([...itemTags, ...itemTopics])];
-
-      // Add Knowledge Node
-      addNode({
-        id: knId,
-        label: item.title,
-        type: "knowledge",
-        sourceType: item.sourceType || "note",
-        sourceUrl: item.sourceUrl || "",
-        summary: item.summary || (item.content ? item.content.substring(0, 150) : ""),
-        tags: itemTags,
-        topics: itemTopics,
-        createdAt: item.createdAt,
+      addEdge({
+        from: `k-${sourceId}`,
+        to: `k-${targetId}`,
+        relationship: rel.relationshipType,
+        label: rel.relationshipType.replace(/_/g, " "),
+        confidence: rel.confidence,
+        reason: rel.reason || "",
       });
+    }
 
-      if (allLabels.length === 0) {
-        const domainId = "domain-GENERAL";
-        domainsUsed.add("GENERAL");
-        addNode({
-          id: domainId,
-          label: "GENERAL",
-          type: "domain",
-        });
-        addEdge({
-          from: domainId,
-          to: knId,
-          relationship: "SOURCE_OF_TOPIC",
-          label: "Contains",
-        });
+    // ---- Jaccard Fallback: ONLY for nodes with ZERO AI relationships ----
+    // Strict threshold: must share 3+ tags/topics OR jaccard >= 0.45 with 2+ shared
+    // This prevents weak spurious connections
+    const itemsWithAnyRelationship = new Set();
+    aiRelationships.forEach((r) => {
+      if (knowledgeIdSet.has(r.sourceKnowledgeId.toString())) {
+        itemsWithAnyRelationship.add(r.sourceKnowledgeId.toString());
       }
-
-      allLabels.forEach((label) => {
-        const cleanLabel = label.trim();
-        if (!cleanLabel) return;
-
-        const subtopicId = `subtopic-${cleanLabel.toLowerCase()}`;
-        const domain = getDomainForTag(cleanLabel);
-        const domainId = `domain-${domain}`;
-        domainsUsed.add(domain);
-
-        addNode({
-          id: domainId,
-          label: domain,
-          type: "domain",
-        });
-
-        addNode({
-          id: subtopicId,
-          label: cleanLabel,
-          type: "tag",
-          domain: domain,
-        });
-
-        addEdge({
-          from: domainId,
-          to: subtopicId,
-          relationship: "SOURCE_OF_TOPIC",
-          label: "Parent Domain",
-        });
-
-        addEdge({
-          from: subtopicId,
-          to: knId,
-          relationship: "SAME_TOPIC",
-          label: "Belongs To",
-        });
-      });
+      if (knowledgeIdSet.has(r.targetKnowledgeId.toString())) {
+        itemsWithAnyRelationship.add(r.targetKnowledgeId.toString());
+      }
     });
 
-    // Compute inter-knowledge semantic relationships (strict pruning for real relationships)
-    for (let i = 0; i < knowledgeItems.length; i++) {
-      for (let j = i + 1; j < knowledgeItems.length; j++) {
-        const itemA = knowledgeItems[i];
-        const itemB = knowledgeItems[j];
+    const orphanItems = knowledgeItems.filter(
+      (k) => !itemsWithAnyRelationship.has(k._id.toString())
+    );
 
-        const tagsA = [...(itemA.tags || []), ...(itemA.topics || [])].map((t) => t.toLowerCase().trim()).filter(Boolean);
-        const tagsB = [...(itemB.tags || []), ...(itemB.topics || [])].map((t) => t.toLowerCase().trim()).filter(Boolean);
+    if (orphanItems.length > 0) {
+      // Compare each orphan against ALL knowledge items (not just other orphans)
+      for (const orphan of orphanItems) {
+        for (const other of knowledgeItems) {
+          if (orphan._id.toString() === other._id.toString()) continue;
 
-        const setA = new Set(tagsA);
-        const setB = new Set(tagsB);
+          const tagsA = [...(orphan.tags || []), ...(orphan.topics || [])]
+            .map((t) => t.toLowerCase().trim())
+            .filter(Boolean);
+          const tagsB = [...(other.tags || []), ...(other.topics || [])]
+            .map((t) => t.toLowerCase().trim())
+            .filter(Boolean);
 
-        const intersection = [...setA].filter((x) => setB.has(x));
-        const unionSize = new Set([...tagsA, ...tagsB]).size;
+          if (tagsA.length === 0 || tagsB.length === 0) continue;
 
-        const jaccardScore = unionSize > 0 ? intersection.length / unionSize : 0;
+          const setA = new Set(tagsA);
+          const setB = new Set(tagsB);
+          const intersection = [...setA].filter((x) => setB.has(x));
+          const unionSize = new Set([...tagsA, ...tagsB]).size;
+          const jaccardScore = unionSize > 0 ? intersection.length / unionSize : 0;
 
-        // Strict threshold: only connect if 2+ shared tags/topics OR jaccard similarity >= 0.35
-        if (intersection.length >= 2 || (jaccardScore >= 0.35 && intersection.length >= 1)) {
-          addEdge({
-            from: `k-${itemA._id}`,
-            to: `k-${itemB._id}`,
-            relationship: "SEMANTICALLY_RELATED",
-            label: `Shared: ${intersection.slice(0, 2).join(", ")}`,
-          });
+          // Strict threshold: 3+ shared terms OR jaccard >= 0.45 with 2+ shared
+          const meetsThreshold =
+            intersection.length >= 3 ||
+            (jaccardScore >= 0.45 && intersection.length >= 2);
+
+          if (meetsThreshold) {
+            addEdge({
+              from: `k-${orphan._id}`,
+              to: `k-${other._id}`,
+              relationship: "SEMANTICALLY_RELATED",
+              label: `Shared: ${intersection.slice(0, 2).join(", ")}`,
+              confidence: parseFloat(jaccardScore.toFixed(2)),
+              reason: `Jaccard fallback — shares: ${intersection.slice(0, 3).join(", ")}`,
+            });
+          }
         }
       }
     }
+
+    // Compute unique domains for stats (from node metadata, not graph nodes)
+    const uniqueDomains = [...new Set(nodes.map((n) => n.domain).filter((d) => d !== "General"))];
 
     return res.status(200).json({
       success: true,
       nodes,
       edges,
+      stats: {
+        knowledgeItems: nodes.length,
+        semanticEdges: edges.filter((e) => e.relationship !== "SEMANTICALLY_RELATED").length,
+        jaccardEdges: edges.filter((e) => e.relationship === "SEMANTICALLY_RELATED").length,
+        totalEdges: edges.length,
+        domains: uniqueDomains,
+        orphanNodes: orphanItems.length,
+      },
     });
   } catch (error) {
     console.error("Get Knowledge Graph Error:", error.message);
     return res.status(500).json({
       success: false,
       message: "Failed to generate knowledge graph",
+    });
+  }
+};
+
+
+// ============================================================
+// REBUILD GRAPH RELATIONSHIPS
+// Clears all existing AI relationships for user, then rebuilds
+// them from scratch for all AI-processed knowledge items.
+// POST /knowledge/graph/rebuild
+// ============================================================
+
+export const rebuildGraphRelationships = async (req, res) => {
+  try {
+    const userId = req.userId;
+
+    console.log("\n========================================");
+    console.log("GRAPH REBUILD START");
+    console.log(`USER ID: ${userId}`);
+
+    // 1. Delete ALL existing relationships for this user
+    const deleted = await KnowledgeRelationship.deleteMany({
+      userId,
+    });
+
+    console.log(`[GRAPH REBUILD] Cleared ${deleted.deletedCount} old relationships`);
+
+    // 2. Fetch ALL knowledge items for this user
+    const knowledgeItems = await Knowledge.find({
+      userId,
+    }).sort({ createdAt: -1 });
+
+    console.log(`KNOWLEDGE COUNT: ${knowledgeItems.length}`);
+    console.log("KNOWLEDGE ITEMS LOADED");
+
+    if (knowledgeItems.length === 0) {
+      console.log("GRAPH REBUILD COMPLETE: 0 Knowledge items in vault");
+      console.log("========================================\n");
+      return res.status(200).json({
+        success: true,
+        message: "No knowledge items found to build graph.",
+        cleared: deleted.deletedCount,
+        built: 0,
+      });
+    }
+
+    // 3. Respond 202 Accepted immediately
+    res.status(202).json({
+      success: true,
+      message: `Cleared ${deleted.deletedCount} old relationships. Rebuilding semantic graph for ${knowledgeItems.length} items in background.`,
+      cleared: deleted.deletedCount,
+      totalItems: knowledgeItems.length,
+    });
+
+    // 4. Background processing
+    (async () => {
+      let builtCount = 0;
+      let embeddedCount = 0;
+
+      for (let i = 0; i < knowledgeItems.length; i++) {
+        const item = knowledgeItems[i];
+        try {
+          await new Promise((resolve) => setTimeout(resolve, 600));
+
+          // Step A: Analyze unanalyzed items first if needed
+          if (!item.aiProcessed || !item.summary || !item.tags || item.tags.length === 0) {
+            console.log(`[REBUILD AI ANALYZE] Processing unanalyzed item ${item._id}: "${item.title}"`);
+            try {
+              const aiData = await analyzeKnowledge({
+                title: item.title,
+                content: item.content,
+                sourceType: item.sourceType,
+                sourceUrl: item.sourceUrl,
+              });
+
+              if (aiData && aiData.title) {
+                item.title = chooseBestTitle(aiData.title, item.title);
+                item.summary = aiData.summary || "";
+                item.tags = Array.isArray(aiData.tags) ? aiData.tags : [];
+                item.topics = Array.isArray(aiData.topics) ? aiData.topics : [];
+                item.entities = Array.isArray(aiData.entities) ? aiData.entities : [];
+                item.aiProcessed = true;
+                item.aiAnalysisStatus = "completed";
+                item.aiAnalyzedAt = new Date();
+                await item.save();
+              }
+            } catch (aErr) {
+              console.warn(`[REBUILD AI ANALYZE NOTICE] AI analysis skipped for item ${item._id}:`, aErr.message);
+            }
+          }
+
+          // Step B: Backfill embedding into ChromaDB
+          try {
+            await embedKnowledge({
+              knowledgeId: item._id.toString(),
+              userId: userId.toString(),
+              title: item.title,
+              content: item.content,
+              sourceType: item.sourceType,
+              sourceUrl: item.sourceUrl,
+            });
+            embeddedCount++;
+            console.log(`[REBUILD EMBEDDING] Embedding stored for: "${item.title}"`);
+          } catch (eErr) {
+            console.warn(`[REBUILD EMBEDDING NOTICE] Vector embed warning for ${item._id}:`, eErr.message);
+          }
+
+          // Step C: Build relationships
+          console.log(`[REBUILD RELATIONS] Analyzing candidates for (${i + 1}/${knowledgeItems.length}): "${item.title}"`);
+
+          await buildKnowledgeRelationships({
+            userId,
+            newKnowledgeId: item._id,
+            newTitle: item.title,
+            newSummary: item.summary || "",
+            newTags: Array.isArray(item.tags) ? item.tags : [],
+            newTopics: Array.isArray(item.topics) ? item.topics : [],
+            newEntities: Array.isArray(item.entities) ? item.entities : [],
+            content: item.content || item.summary || item.title,
+            Knowledge,
+          });
+
+          builtCount++;
+        } catch (itemErr) {
+          console.error(`[GRAPH REBUILD FAILED ITEM] ${item._id}:`, itemErr.message);
+        }
+      }
+
+      // Count final saved relationships
+      const finalRelCount = await KnowledgeRelationship.countDocuments({ userId });
+
+      console.log("\n========================================");
+      console.log("GRAPH REBUILD COMPLETE");
+      console.log(`EMBEDDINGS PROCESSED: ${embeddedCount}/${knowledgeItems.length}`);
+      console.log(`KNOWLEDGE ITEMS EVALUATED: ${builtCount}/${knowledgeItems.length}`);
+      console.log(`RELATIONSHIPS SAVED IN DB: ${finalRelCount}`);
+      console.log("========================================\n");
+    })();
+
+  } catch (error) {
+    console.error("Rebuild Graph Error:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Failed to start graph rebuild",
+      error: error.message,
     });
   }
 };

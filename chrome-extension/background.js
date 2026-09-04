@@ -1,9 +1,9 @@
 /**
  * background.js — AI Knowledge Vault Chrome Extension
- * Service worker: sets up context menu for saving selected text.
+ * Service worker: sets up context menu for saving selected text and webpages.
  */
 
-const API_BASE = "http://localhost:3000/api";
+importScripts("auth.js");
 
 
 // ---- Create context menu on install ----
@@ -26,30 +26,27 @@ chrome.runtime.onInstalled.addListener(() => {
 // ---- Context menu click handler ----
 
 chrome.contextMenus.onClicked.addListener(async (info, tab) => {
-  const token = await getToken();
+  const token = await getAccessToken();
 
   if (!token) {
+    console.log("[AUTH] User must sign in again — context menu clicked with no token");
     chrome.notifications.create({
       type: "basic",
       iconUrl: "icons/icon-48.png",
-      title: "Knowledge Vault",
-      message: "Please sign in to the extension first.",
+      title: "Knowledge Vault — Authentication Required",
+      message: "Session expired. Please sign in again.",
     });
     return;
   }
 
   if (info.menuItemId === "save-selection" && info.selectionText) {
     try {
-      await apiPost(
-        "/knowledge",
-        {
-          title: tab.title?.substring(0, 80) || "Selected Text",
-          content: info.selectionText.substring(0, 8000),
-          sourceType: "article",
-          sourceUrl: tab.url || "",
-        },
-        token
-      );
+      await apiPost("/knowledge", {
+        title: tab.title?.substring(0, 80) || "Selected Text",
+        content: info.selectionText.substring(0, 8000),
+        sourceType: "article",
+        sourceUrl: tab.url || "",
+      });
 
       chrome.notifications.create({
         type: "basic",
@@ -58,6 +55,7 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
         message: "Selection saved to your vault!",
       });
     } catch (err) {
+      console.error("[AUTH] Context menu save selection error:", err.message);
       chrome.notifications.create({
         type: "basic",
         iconUrl: "icons/icon-48.png",
@@ -72,7 +70,7 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
     if (!url) return;
 
     try {
-      await apiPost("/knowledge/import/url", { url }, token);
+      await apiPost("/knowledge/import/url", { url });
 
       chrome.notifications.create({
         type: "basic",
@@ -81,6 +79,7 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
         message: "Page saved to your vault!",
       });
     } catch (err) {
+      console.error("[AUTH] Context menu save page error:", err.message);
       chrome.notifications.create({
         type: "basic",
         iconUrl: "icons/icon-48.png",
@@ -90,31 +89,3 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
     }
   }
 });
-
-
-// ---- Helpers ----
-
-function getToken() {
-  return new Promise((resolve) => {
-    chrome.storage.local.get(["kv_token"], (r) => resolve(r.kv_token || null));
-  });
-}
-
-async function apiPost(path, body, token) {
-  const res = await fetch(`${API_BASE}${path}`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${token}`,
-    },
-    body: JSON.stringify(body),
-  });
-
-  const data = await res.json();
-
-  if (!res.ok) {
-    throw new Error(data.message || `Error ${res.status}`);
-  }
-
-  return data;
-}

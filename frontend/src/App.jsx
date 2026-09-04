@@ -11,6 +11,8 @@ import Register from "./pages/Register";
 import Knowledge from "./pages/Knowledge";
 import AiChat from "./pages/AiChat";
 import Graph from "./pages/Graph";
+import ForgotPassword from "./pages/ForgotPassword";
+import ResetPassword from "./pages/ResetPassword";
 import ProtectedRoute from "./components/ProtectedRoute";
 
 function App() {
@@ -29,6 +31,16 @@ function App() {
         <Route
           path="/register"
           element={<Register />}
+        />
+
+        <Route
+          path="/forgot-password"
+          element={<ForgotPassword />}
+        />
+
+        <Route
+          path="/reset-password"
+          element={<ResetPassword />}
         />
 
         <Route

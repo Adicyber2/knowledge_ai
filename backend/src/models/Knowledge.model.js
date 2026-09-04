@@ -44,6 +44,11 @@ const knowledgeSchema = new mongoose.Schema(
       default: "",
     },
 
+    category: {
+      type: String,
+      default: "",
+    },
+
     tags: [
       {
         type: String,
@@ -56,7 +61,59 @@ const knowledgeSchema = new mongoose.Schema(
       },
     ],
 
+    entities: [
+      {
+        type: String,
+      },
+    ],
+
     aiProcessed: {
+      type: Boolean,
+      default: false,
+    },
+
+    aiAnalysisStatus: {
+      type: String,
+      enum: ["pending", "analyzing", "completed", "failed"],
+      default: "pending",
+    },
+
+    aiAnalysisError: {
+      type: String,
+      default: "",
+    },
+
+    aiAnalyzedAt: {
+      type: Date,
+    },
+
+    aiProvider: {
+      type: String,
+      default: "",
+    },
+
+    aiModel: {
+      type: String,
+      default: "",
+    },
+
+    // ---- 30-day expiry system ----
+    expiresAt: {
+      type: Date,
+      default: () => {
+        const d = new Date();
+        d.setDate(d.getDate() + 30);
+        return d;
+      },
+    },
+
+    isPermanent: {
+      type: Boolean,
+      default: false,
+    },
+
+    // Track if Day-25 notification has been sent (prevents duplicates)
+    expiryNotificationSent: {
       type: Boolean,
       default: false,
     },

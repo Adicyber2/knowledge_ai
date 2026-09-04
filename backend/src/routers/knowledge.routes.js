@@ -13,6 +13,9 @@ import {
   importFromImage,
   semanticSearch,
   getKnowledgeGraph,
+  analyzeKnowledgeById,
+  bulkAnalyzeKnowledge,
+  rebuildGraphRelationships,
 } from "../controllers/knowledge.controller.js";
 
 import authMiddleware from "../middlewares/auth.middleware.js";
@@ -78,6 +81,22 @@ router.post(
   importFromImage
 );
 
+// ---- Bulk AI Analysis (must be before /:id) ----
+
+router.post(
+  "/bulk-analyze",
+  authMiddleware,
+  bulkAnalyzeKnowledge
+);
+
+// ---- Graph Rebuild (clear stale relationships + regenerate) ----
+
+router.post(
+  "/graph/rebuild",
+  authMiddleware,
+  rebuildGraphRelationships
+);
+
 // ---- CRUD ----
 
 router.get(
@@ -102,6 +121,14 @@ router.delete(
   "/:id",
   authMiddleware,
   deleteKnowledge
+);
+
+// ---- AI Re-analysis for single item (must be after static routes, before generic /:id) ----
+
+router.post(
+  "/:id/analyze",
+  authMiddleware,
+  analyzeKnowledgeById
 );
 
 

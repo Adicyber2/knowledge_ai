@@ -1,25 +1,16 @@
-from google import genai
-import os
-from dotenv import load_dotenv
-
 from app.services.vector_service import search_knowledge
-
-load_dotenv()
-
-client = genai.Client(
-    api_key=os.getenv("GEMINI_API_KEY")
-)
+from app.services.providers.provider_manager import get_provider_manager
 
 RELEVANCE_THRESHOLD = 1.40
 
 
 def ask_knowledge(question: str, user_id: str, context: str = ""):
     """
-    Automatic RAG pipeline with Gemini 2.5 Flash:
+    Automatic RAG pipeline with AI Provider Manager (Gemini Primary + Mistral Secondary):
     1. If hybrid context is provided by Node backend, use it directly.
     2. Otherwise perform vector search in ChromaDB filtered strictly by user_id.
-    3. Synthesize grounded answer with Gemini 2.5 Flash.
-    4. Return answer + sources.
+    3. Synthesize grounded answer using AI Provider Manager.
+    4. Return answer + sources + provider metadata.
     """
 
     print(f"\n--- [PYTHON RAG SERVICE LOG] ---")
@@ -27,44 +18,27 @@ def ask_knowledge(question: str, user_id: str, context: str = ""):
     print(f"Question: '{question}'")
     print(f"Incoming Context Provided: {bool(context and context.strip())}")
 
+    provider_mgr = get_provider_manager()
+
     # ----------------------------------------------------
     # Case 1: Hybrid Context provided by Node backend
     # ----------------------------------------------------
     if context and context.strip():
         print(f"Context Length: {len(context)} chars")
 
-        prompt = f"""
-You are an AI assistant for a personal Knowledge Vault.
-
-Answer the user's question directly, clearly, and naturally using ONLY the Knowledge Vault context provided below.
-
-KNOWLEDGE VAULT CONTEXT:
-{context}
-
-USER QUESTION:
-{question}
-
-CRITICAL INSTRUCTIONS:
-- Answer the question strictly using facts directly stated in the Knowledge Vault Context.
-- Do NOT say "Based on the provided context" or "According to the context".
-- Do NOT invent facts, citations, or draw from external knowledge.
-- If the Knowledge Vault Context does not contain sufficient facts to answer the question, state:
-  "I couldn't find enough information about this in your Knowledge Vault."
-- Keep your answer clear, concise, and helpful.
-"""
-
-        response = client.models.generate_content(
-            model="gemini-2.5-flash",
-            contents=prompt
+        answer_text, metadata = provider_mgr.generate_rag_answer(
+            question=question,
+            context=context,
         )
 
-        answer_text = response.text or ""
-        print(f"Gemini Answer Length: {len(answer_text)} chars")
+        print(f"RAG Answer Length: {len(answer_text)} chars (Provider: {metadata.get('provider')})")
         print(f"--- [END PYTHON RAG LOG] ---\n")
 
         return {
             "answer": answer_text,
-            "sources": []
+            "sources": [],
+            "provider": metadata.get("provider", "gemini"),
+            "model": metadata.get("model", ""),
         }
 
     # ----------------------------------------------------
@@ -87,7 +61,9 @@ CRITICAL INSTRUCTIONS:
         print(f"--- [END PYTHON RAG LOG] ---\n")
         return {
             "answer": "I couldn't find enough information about this in your Knowledge Vault.",
-            "sources": []
+            "sources": [],
+            "provider": provider_mgr.primary.provider_name,
+            "model": provider_mgr.primary.model_name,
         }
 
     min_distance = distances[0] if distances else 2.0
@@ -98,7 +74,9 @@ CRITICAL INSTRUCTIONS:
         print(f"--- [END PYTHON RAG LOG] ---\n")
         return {
             "answer": "I couldn't find enough information about this in your Knowledge Vault.",
-            "sources": []
+            "sources": [],
+            "provider": provider_mgr.primary.provider_name,
+            "model": provider_mgr.primary.model_name,
         }
 
     valid_docs = []
@@ -130,41 +108,24 @@ CRITICAL INSTRUCTIONS:
         print(f"--- [END PYTHON RAG LOG] ---\n")
         return {
             "answer": "I couldn't find enough information about this in your Knowledge Vault.",
-            "sources": []
+            "sources": [],
+            "provider": provider_mgr.primary.provider_name,
+            "model": provider_mgr.primary.model_name,
         }
 
     combined_context = "\n\n---\n\n".join(valid_docs)
 
-    prompt = f"""
-You are an AI assistant for a personal Knowledge Vault.
-
-Answer the user's question directly, clearly, and naturally using ONLY the Knowledge Vault context below.
-
-KNOWLEDGE VAULT CONTEXT:
-{combined_context}
-
-USER QUESTION:
-{question}
-
-CRITICAL INSTRUCTIONS:
-- Answer the question strictly using facts directly stated in the Knowledge Vault Context.
-- Do NOT say "Based on the provided context" or "According to the context".
-- Do NOT invent facts or draw from external knowledge.
-- If the Knowledge Vault Context does not contain sufficient facts to answer the question, state:
-  "I couldn't find enough information about this in your Knowledge Vault."
-- Keep your answer clear, natural, and helpful.
-"""
-
-    response = client.models.generate_content(
-        model="gemini-2.5-flash",
-        contents=prompt
+    answer_text, metadata = provider_mgr.generate_rag_answer(
+        question=question,
+        context=combined_context,
     )
 
-    answer_text = response.text or ""
-    print(f"Gemini Answer Length: {len(answer_text)} chars")
+    print(f"RAG Answer Length: {len(answer_text)} chars (Provider: {metadata.get('provider')})")
     print(f"--- [END PYTHON RAG LOG] ---\n")
 
     return {
         "answer": answer_text,
-        "sources": sources
+        "sources": sources,
+        "provider": metadata.get("provider", "gemini"),
+        "model": metadata.get("model", ""),
     }

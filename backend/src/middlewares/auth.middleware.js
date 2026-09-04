@@ -84,6 +84,12 @@ const authMiddleware = (req, res, next) => {
       process.env.JWT_SECRET
     );
 
+    if (decoded.type && decoded.type !== "access") {
+      return res.status(401).json({
+        message: "Invalid or expired token",
+      });
+    }
+
     req.userId = decoded.userId;
 
     next();

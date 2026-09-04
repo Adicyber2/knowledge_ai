@@ -1,7 +1,14 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { useAuth } from "../context/AuthContext";
-import { getDashboardData,getKnowledgeActivity } from "../service/dashboardService";
+import { getDashboardData, getKnowledgeActivity } from "../service/dashboardService";
 import { useNavigate } from "react-router-dom";
+import {
+  getNotifications,
+  markAllRead,
+  keepKnowledgePermanent,
+  deleteKnowledgeNow,
+  dismissNotification,
+} from "../service/notificationService";
 
 import Sidebar from "../components/Sidebar";
 import "./Dashboard.css";
@@ -19,8 +26,14 @@ const Dashboard = () => {
   const [knowledge, setKnowledge] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-
   const [activity, setActivity] = useState([]);
+
+  // Notification state
+  const [notifications, setNotifications] = useState([]);
+  const [unreadCount, setUnreadCount] = useState(0);
+  const [showNotifications, setShowNotifications] = useState(false);
+  const [notifLoading, setNotifLoading] = useState({});
+  const notifRef = useRef(null);
 
 
   /* ================= LOAD KNOWLEDGE ================= */
@@ -85,6 +98,83 @@ const Dashboard = () => {
   loadDashboard();
 
 }, [authLoading, user]);
+
+
+  /* ================= NOTIFICATIONS ================= */
+
+  const loadNotifications = async () => {
+    try {
+      const data = await getNotifications();
+      setNotifications(data.notifications || []);
+      setUnreadCount(data.unreadCount || 0);
+    } catch (err) {
+      console.error("Failed to load notifications:", err.message);
+    }
+  };
+
+  useEffect(() => {
+    if (user) loadNotifications();
+  }, [user]);
+
+  // Close notification panel on outside click
+  useEffect(() => {
+    const handleClick = (e) => {
+      if (notifRef.current && !notifRef.current.contains(e.target)) {
+        setShowNotifications(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClick);
+    return () => document.removeEventListener("mousedown", handleClick);
+  }, []);
+
+  const handleKeepPermanent = async (notifId) => {
+    setNotifLoading((p) => ({ ...p, [notifId]: "keep" }));
+    try {
+      await keepKnowledgePermanent(notifId);
+      await loadNotifications();
+    } catch (err) {
+      alert(err.response?.data?.message || "Failed to mark as permanent");
+    } finally {
+      setNotifLoading((p) => ({ ...p, [notifId]: null }));
+    }
+  };
+
+  const handleDeleteNow = async (notifId) => {
+    if (!window.confirm("Delete this knowledge item now? This cannot be undone.")) return;
+    setNotifLoading((p) => ({ ...p, [notifId]: "delete" }));
+    try {
+      await deleteKnowledgeNow(notifId);
+      await loadNotifications();
+      // Refresh knowledge count
+      const data = await getDashboardData();
+      setKnowledge(Array.isArray(data) ? data : []);
+    } catch (err) {
+      alert(err.response?.data?.message || "Failed to delete");
+    } finally {
+      setNotifLoading((p) => ({ ...p, [notifId]: null }));
+    }
+  };
+
+  const handleDismiss = async (notifId) => {
+    setNotifLoading((p) => ({ ...p, [notifId]: "dismiss" }));
+    try {
+      await dismissNotification(notifId);
+      await loadNotifications();
+    } catch (err) {
+      console.error("Dismiss failed:", err.message);
+    } finally {
+      setNotifLoading((p) => ({ ...p, [notifId]: null }));
+    }
+  };
+
+  const handleMarkAllRead = async () => {
+    try {
+      await markAllRead();
+      await loadNotifications();
+    } catch (err) {
+      console.error("Mark all read failed:", err.message);
+    }
+  };
 
 
 //   const fetchActivity = async () => {
@@ -243,14 +333,242 @@ const aiProcessedCount =
           </div>
 
 
-          <button
-            className="primary-button"
-            onClick={() =>
-              navigate("/knowledge")
-            }
-          >
-            + Add Knowledge
-          </button>
+          <div style={{ display: "flex", alignItems: "center", gap: "1rem" }}>
+
+            {/* ===== NOTIFICATION BELL ===== */}
+            <div style={{ position: "relative" }} ref={notifRef}>
+              <button
+                onClick={() => {
+                  setShowNotifications((v) => !v);
+                  if (!showNotifications && unreadCount > 0) handleMarkAllRead();
+                }}
+                title="Notifications"
+                style={{
+                  background: "var(--glass-bg, rgba(255,255,255,0.05))",
+                  border: "1px solid var(--border-color, rgba(255,255,255,0.1))",
+                  borderRadius: "50%",
+                  width: "42px",
+                  height: "42px",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  cursor: "pointer",
+                  fontSize: "1.1rem",
+                  position: "relative",
+                  color: "var(--text-primary, #f8fafc)",
+                  transition: "background 0.2s",
+                }}
+              >
+                🔔
+                {unreadCount > 0 && (
+                  <span style={{
+                    position: "absolute",
+                    top: "-4px",
+                    right: "-4px",
+                    background: "#ef4444",
+                    color: "#fff",
+                    borderRadius: "50%",
+                    width: "18px",
+                    height: "18px",
+                    fontSize: "0.65rem",
+                    fontWeight: "700",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    lineHeight: 1,
+                  }}>
+                    {unreadCount > 9 ? "9+" : unreadCount}
+                  </span>
+                )}
+              </button>
+
+              {/* ===== NOTIFICATION DROPDOWN ===== */}
+              {showNotifications && (
+                <div style={{
+                  position: "absolute",
+                  top: "calc(100% + 10px)",
+                  right: 0,
+                  width: "360px",
+                  maxHeight: "480px",
+                  overflowY: "auto",
+                  background: "var(--card-bg, #1e293b)",
+                  border: "1px solid var(--border-color, rgba(255,255,255,0.1))",
+                  borderRadius: "12px",
+                  boxShadow: "0 20px 60px rgba(0,0,0,0.5)",
+                  zIndex: 1000,
+                  padding: "0",
+                }}>
+
+                  {/* Header */}
+                  <div style={{
+                    padding: "1rem 1.25rem",
+                    borderBottom: "1px solid var(--border-color, rgba(255,255,255,0.08))",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                  }}>
+                    <span style={{ fontWeight: "600", color: "var(--text-primary, #f8fafc)", fontSize: "0.9rem" }}>
+                      🔔 Notifications
+                    </span>
+                    {notifications.length > 0 && (
+                      <button
+                        onClick={handleMarkAllRead}
+                        style={{
+                          background: "none",
+                          border: "none",
+                          color: "var(--accent-primary, #6366f1)",
+                          fontSize: "0.75rem",
+                          cursor: "pointer",
+                          padding: "2px 6px",
+                        }}
+                      >
+                        Mark all read
+                      </button>
+                    )}
+                  </div>
+
+                  {/* Empty state */}
+                  {notifications.length === 0 && (
+                    <div style={{
+                      padding: "2rem",
+                      textAlign: "center",
+                      color: "var(--text-muted, #94a3b8)",
+                      fontSize: "0.875rem",
+                    }}>
+                      ✅ No new notifications
+                    </div>
+                  )}
+
+                  {/* Notification items */}
+                  {notifications.map((notif) => {
+                    const daysLeft = Math.max(
+                      0,
+                      Math.ceil((new Date(notif.expiresAt) - new Date()) / (1000 * 60 * 60 * 24))
+                    );
+                    const isLoading = notifLoading[notif._id];
+
+                    return (
+                      <div
+                        key={notif._id}
+                        style={{
+                          padding: "1rem 1.25rem",
+                          borderBottom: "1px solid var(--border-color, rgba(255,255,255,0.06))",
+                          background: notif.read ? "transparent" : "rgba(99,102,241,0.05)",
+                          transition: "background 0.2s",
+                        }}
+                      >
+                        <div style={{
+                          display: "flex",
+                          alignItems: "flex-start",
+                          gap: "0.5rem",
+                          marginBottom: "0.6rem",
+                        }}>
+                          <span style={{ fontSize: "1rem" }}>⏰</span>
+                          <div style={{ flex: 1 }}>
+                            <div style={{
+                              fontWeight: "600",
+                              color: "var(--text-primary, #f8fafc)",
+                              fontSize: "0.825rem",
+                              marginBottom: "0.2rem",
+                              lineHeight: "1.3",
+                            }}>
+                              {notif.isPermanent ? "✅ Kept permanently" : (
+                                daysLeft === 0
+                                  ? `"${notif.knowledgeTitle}" expires today!`
+                                  : `"${notif.knowledgeTitle}" expires in ${daysLeft} day${daysLeft !== 1 ? "s" : ""}`
+                              )}
+                            </div>
+                            {!notif.isPermanent && (
+                              <div style={{
+                                fontSize: "0.75rem",
+                                color: daysLeft <= 1 ? "#ef4444" : daysLeft <= 3 ? "#f59e0b" : "var(--text-muted, #94a3b8)",
+                              }}>
+                                Expires: {new Date(notif.expiresAt).toLocaleDateString("en-IN", {
+                                  day: "2-digit",
+                                  month: "short",
+                                  year: "numeric",
+                                })}
+                              </div>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* Action buttons */}
+                        {!notif.isPermanent && (
+                          <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
+                            <button
+                              onClick={() => handleKeepPermanent(notif._id)}
+                              disabled={!!isLoading}
+                              style={{
+                                flex: 1,
+                                padding: "0.35rem 0.6rem",
+                                background: "rgba(99,102,241,0.15)",
+                                border: "1px solid rgba(99,102,241,0.4)",
+                                borderRadius: "6px",
+                                color: "#818cf8",
+                                fontSize: "0.72rem",
+                                cursor: "pointer",
+                                fontWeight: "500",
+                                transition: "all 0.2s",
+                                opacity: isLoading ? 0.6 : 1,
+                              }}
+                            >
+                              {isLoading === "keep" ? "Saving..." : "♾ Keep Permanently"}
+                            </button>
+
+                            <button
+                              onClick={() => handleDeleteNow(notif._id)}
+                              disabled={!!isLoading}
+                              style={{
+                                flex: 1,
+                                padding: "0.35rem 0.6rem",
+                                background: "rgba(239,68,68,0.1)",
+                                border: "1px solid rgba(239,68,68,0.3)",
+                                borderRadius: "6px",
+                                color: "#f87171",
+                                fontSize: "0.72rem",
+                                cursor: "pointer",
+                                fontWeight: "500",
+                                opacity: isLoading ? 0.6 : 1,
+                              }}
+                            >
+                              {isLoading === "delete" ? "Deleting..." : "🗑 Delete Now"}
+                            </button>
+
+                            <button
+                              onClick={() => handleDismiss(notif._id)}
+                              disabled={!!isLoading}
+                              title="Dismiss notification"
+                              style={{
+                                padding: "0.35rem 0.5rem",
+                                background: "transparent",
+                                border: "1px solid var(--border-color, rgba(255,255,255,0.1))",
+                                borderRadius: "6px",
+                                color: "var(--text-muted, #94a3b8)",
+                                fontSize: "0.72rem",
+                                cursor: "pointer",
+                                opacity: isLoading ? 0.6 : 1,
+                              }}
+                            >
+                              ✕
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+
+            <button
+              className="primary-button"
+              onClick={() => navigate("/knowledge")}
+            >
+              + Add Knowledge
+            </button>
+
+          </div>
 
         </header>
 

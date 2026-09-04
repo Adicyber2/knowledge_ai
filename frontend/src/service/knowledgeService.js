@@ -102,10 +102,18 @@ export const deleteKnowledge = async (id) => {
 };
 
 
-// ---- RE-ANALYZE (manual trigger) ----
+// ---- RE-ANALYZE (manual trigger for single item) ----
 
 export const analyzeKnowledge = async (id) => {
   const response = await api.post(`/knowledge/${id}/analyze`);
+  return response.data;
+};
+
+
+// ---- BULK ANALYZE (process all unanalyzed items) ----
+
+export const bulkAnalyze = async () => {
+  const response = await api.post("/knowledge/bulk-analyze");
   return response.data;
 };
 
@@ -116,7 +124,11 @@ export const importFromUrl = async (url) => {
   const response = await api.post("/knowledge/import/url", { url }, {
     timeout: 30000,
   });
-  return response.data.data;
+  const saved = response.data.data;
+  if (saved) {
+    await saveOneKnowledgeOffline(saved).catch(() => {});
+  }
+  return saved;
 };
 
 
@@ -126,7 +138,11 @@ export const importFromYoutube = async (url) => {
   const response = await api.post("/knowledge/import/youtube", { url }, {
     timeout: 30000,
   });
-  return response.data.data;
+  const saved = response.data.data;
+  if (saved) {
+    await saveOneKnowledgeOffline(saved).catch(() => {});
+  }
+  return saved;
 };
 
 
@@ -141,7 +157,11 @@ export const importFromPdf = async (file) => {
     timeout: 60000,
   });
 
-  return response.data.data;
+  const saved = response.data.data;
+  if (saved) {
+    await saveOneKnowledgeOffline(saved).catch(() => {});
+  }
+  return saved;
 };
 
 
@@ -156,7 +176,11 @@ export const importFromImage = async (file) => {
     timeout: 60000,
   });
 
-  return response.data.data;
+  const saved = response.data.data;
+  if (saved) {
+    await saveOneKnowledgeOffline(saved).catch(() => {});
+  }
+  return saved;
 };
 
 
@@ -175,6 +199,14 @@ export const semanticSearch = async (query, limit = 8) => {
 
 export const getKnowledgeGraph = async () => {
   const response = await api.get("/knowledge/graph");
+  return response.data;
+};
+
+
+// ---- REBUILD KNOWLEDGE GRAPH (clear stale relationships + regenerate) ----
+
+export const rebuildKnowledgeGraph = async () => {
+  const response = await api.post("/knowledge/graph/rebuild");
   return response.data;
 };
 

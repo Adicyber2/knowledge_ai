@@ -214,7 +214,10 @@ export const askKnowledge = async (req, res) => {
       ? response.data.sources
       : candidateSources;
 
-    console.log(`[RAG DEBUG] Gemini Response Received (${answer.length} chars)`);
+    const provider = response.data?.provider || "gemini";
+    const model = response.data?.model || "";
+
+    console.log(`[RAG DEBUG] AI Response Received (${answer.length} chars, Provider: ${provider})`);
     console.log(`[RAG DEBUG] Sources Returned: ${sources.length}`);
     console.log(`==================================================\n`);
 
@@ -222,6 +225,8 @@ export const askKnowledge = async (req, res) => {
       success: true,
       answer,
       sources,
+      provider,
+      model,
     });
 
   } catch (error) {

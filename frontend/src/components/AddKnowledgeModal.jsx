@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import {
   createKnowledge,
   importFromUrl,
@@ -59,6 +59,69 @@ const AddKnowledgeModal = ({ onClose, onSaved }) => {
   };
 
 
+  // ============================================================
+  // AUTO-SAVE DRAFT (IndexedDB — local only, no backend calls)
+  // ============================================================
+
+  const DRAFT_KEY = "knowledge_vault_note_draft";
+  const [draftRestored, setDraftRestored] = useState(false);
+  const debounceRef = useRef(null);
+
+  // Restore draft on mount
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem(DRAFT_KEY);
+      if (saved) {
+        const draft = JSON.parse(saved);
+        if (draft.content || draft.title) {
+          setForm((prev) => ({
+            ...prev,
+            title: draft.title || prev.title,
+            content: draft.content || prev.content,
+          }));
+          setDraftRestored(true);
+          setTimeout(() => setDraftRestored(false), 3000);
+        }
+      }
+    } catch {
+      // ignore
+    }
+  }, []);
+
+  // Debounced auto-save on form change (for note tab only)
+  useEffect(() => {
+    if (activeTab !== "note") return;
+    if (!form.content && !form.title) return;
+
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+
+    debounceRef.current = setTimeout(() => {
+      try {
+        localStorage.setItem(DRAFT_KEY, JSON.stringify({
+          title: form.title,
+          content: form.content,
+          savedAt: new Date().toISOString(),
+        }));
+      } catch {
+        // ignore storage errors
+      }
+    }, 1000);
+
+    return () => {
+      if (debounceRef.current) clearTimeout(debounceRef.current);
+    };
+  }, [form.title, form.content, activeTab]);
+
+  const clearDraft = useCallback(() => {
+    try {
+      localStorage.removeItem(DRAFT_KEY);
+    } catch {
+      // ignore
+    }
+  }, []);
+
+
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     reset();
@@ -71,11 +134,12 @@ const AddKnowledgeModal = ({ onClose, onSaved }) => {
       switch (activeTab) {
 
         case "note": {
-          if (!form.title.trim() || !form.content.trim()) {
-            setError("Title and content are required.");
+          if (!form.content.trim()) {
+            setError("Content is required. Title is optional — AI will generate one if left empty.");
             return;
           }
           saved = await createKnowledge(form);
+          clearDraft(); // Clear draft after successful save
           break;
         }
 
@@ -224,6 +288,21 @@ const AddKnowledgeModal = ({ onClose, onSaved }) => {
           </div>
         )}
 
+        {/* Draft restored indicator */}
+        {draftRestored && (
+          <div style={{
+            background: "rgba(99,102,241,0.1)",
+            border: "1px solid rgba(99,102,241,0.3)",
+            borderRadius: "8px",
+            padding: "0.5rem 1rem",
+            marginTop: "12px",
+            color: "#818cf8",
+            fontSize: "0.8rem",
+          }}>
+            ✍️ Draft restored from your last session
+          </div>
+        )}
+
 
         {/* Form */}
 
@@ -235,13 +314,17 @@ const AddKnowledgeModal = ({ onClose, onSaved }) => {
           {activeTab === "note" && (
             <>
               <div className="form-group">
-                <label>Title</label>
+                <label>
+                  Title
+                  <span style={{ color: "var(--text-muted, #94a3b8)", fontSize: "0.75rem", marginLeft: "0.5rem" }}>
+                    (optional — AI will generate if empty)
+                  </span>
+                </label>
                 <input
                   name="title"
                   value={form.title}
                   onChange={handleChange}
-                  placeholder="e.g. Understanding RAG"
-                  required
+                  placeholder="Leave empty for AI-generated title"
                 />
               </div>
 

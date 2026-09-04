@@ -1,5 +1,9 @@
 from fastapi import FastAPI
+from app.config import validate_environment
 from app.routes.ai import router
+
+# Validate required environment configuration on startup
+validate_environment()
 
 app = FastAPI(
     title="AI Knowledge Vault AI Service",

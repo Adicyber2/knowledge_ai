@@ -3,59 +3,12 @@
  * Connects directly to the existing backend API.
  */
 
-const API_BASE = "http://localhost:3000/api";
-
-
-// ---- Storage helpers ----
-
-function getToken() {
-  return new Promise((resolve) => {
-    chrome.storage.local.get(["kv_token"], (r) => resolve(r.kv_token || null));
-  });
-}
-
-function setToken(token) {
-  return new Promise((resolve) => {
-    chrome.storage.local.set({ kv_token: token }, resolve);
-  });
-}
-
-function clearToken() {
-  return new Promise((resolve) => {
-    chrome.storage.local.remove(["kv_token"], resolve);
-  });
-}
 
 function showStatus(elementId, message, type = "success") {
   const el = document.getElementById(elementId);
   if (!el) return;
   el.className = `status-msg ${type}`;
   el.textContent = message;
-}
-
-
-async function apiPost(path, body, token) {
-  console.log(`[EXTENSION DEBUG] API URL: ${API_BASE}${path}`);
-  console.log(`[EXTENSION DEBUG] Request Body:`, body);
-
-  const res = await fetch(`${API_BASE}${path}`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${token}`,
-    },
-    body: JSON.stringify(body),
-  });
-
-  console.log(`[EXTENSION DEBUG] Response status: ${res.status}`);
-
-  const data = await res.json();
-
-  if (!res.ok) {
-    throw new Error(data.message || `Error ${res.status}`);
-  }
-
-  return data;
 }
 
 
@@ -71,13 +24,15 @@ function isYouTube(url) {
 // ---- Init ----
 
 async function init() {
-  const token = await getToken();
+  const token = await getAccessToken();
 
   if (!token) {
     document.getElementById("not-logged-in").style.display = "block";
+    document.getElementById("logged-in").style.display = "none";
     return;
   }
 
+  document.getElementById("not-logged-in").style.display = "none";
   document.getElementById("logged-in").style.display = "block";
 
   // Get current active tab
@@ -120,8 +75,9 @@ document.getElementById("login-btn")?.addEventListener("click", async () => {
       throw new Error(data.message || "Login failed");
     }
 
-    await setToken(data.token);
-    window.location.reload();
+    await setTokens(data.token, data.refreshToken);
+    console.log("[AUTH] Logged in successfully");
+    init();
 
   } catch (err) {
     showStatus("auth-status", err.message, "error");
@@ -132,7 +88,6 @@ document.getElementById("login-btn")?.addEventListener("click", async () => {
 // ---- Save Webpage / Article ----
 
 document.getElementById("save-url-btn")?.addEventListener("click", async () => {
-  const token = await getToken();
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
   const userNote = document.getElementById("user-note")?.value.trim();
 
@@ -141,7 +96,7 @@ document.getElementById("save-url-btn")?.addEventListener("click", async () => {
   showStatus("status-msg", "Extracting article & generating AI summary...", "loading");
 
   try {
-    const data = await apiPost("/knowledge/import/url", { url: tab.url }, token);
+    await apiPost("/knowledge/import/url", { url: tab.url });
 
     if (userNote) {
       await apiPost("/knowledge", {
@@ -149,12 +104,15 @@ document.getElementById("save-url-btn")?.addEventListener("click", async () => {
         content: userNote,
         sourceType: "note",
         sourceUrl: tab.url,
-      }, token).catch(() => {});
+      }).catch(() => {});
     }
 
     showStatus("status-msg", "✓ Saved to your Knowledge Vault!", "success");
   } catch (err) {
     showStatus("status-msg", err.message, "error");
+    if (err.message.includes("Session expired")) {
+      setTimeout(() => init(), 1500);
+    }
   }
 });
 
@@ -162,7 +120,6 @@ document.getElementById("save-url-btn")?.addEventListener("click", async () => {
 // ---- Save YouTube Video ----
 
 document.getElementById("save-youtube-btn")?.addEventListener("click", async () => {
-  const token = await getToken();
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
   const userNote = document.getElementById("user-note")?.value.trim();
 
@@ -171,7 +128,7 @@ document.getElementById("save-youtube-btn")?.addEventListener("click", async () 
   showStatus("status-msg", "Extracting video transcript & generating AI summary...", "loading");
 
   try {
-    await apiPost("/knowledge/import/youtube", { url: tab.url }, token);
+    await apiPost("/knowledge/import/youtube", { url: tab.url });
 
     if (userNote) {
       await apiPost("/knowledge", {
@@ -179,12 +136,15 @@ document.getElementById("save-youtube-btn")?.addEventListener("click", async () 
         content: userNote,
         sourceType: "note",
         sourceUrl: tab.url,
-      }, token).catch(() => {});
+      }).catch(() => {});
     }
 
     showStatus("status-msg", "✓ YouTube video saved to vault!", "success");
   } catch (err) {
     showStatus("status-msg", err.message, "error");
+    if (err.message.includes("Session expired")) {
+      setTimeout(() => init(), 1500);
+    }
   }
 });
 
@@ -192,7 +152,6 @@ document.getElementById("save-youtube-btn")?.addEventListener("click", async () 
 // ---- Save Selected Text ----
 
 document.getElementById("save-selection-btn")?.addEventListener("click", async () => {
-  const token = await getToken();
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
   const userNote = document.getElementById("user-note")?.value.trim();
 
@@ -220,19 +179,18 @@ document.getElementById("save-selection-btn")?.addEventListener("click", async (
   ].filter(Boolean).join("\n\n");
 
   try {
-    await apiPost(
-      "/knowledge",
-      {
-        title: tab.title?.substring(0, 80) || "Saved Selection",
-        content: fullContent.substring(0, 8000),
-        sourceType: "article",
-        sourceUrl: tab.url,
-      },
-      token
-    );
+    await apiPost("/knowledge", {
+      title: tab.title?.substring(0, 80) || "Saved Selection",
+      content: fullContent.substring(0, 8000),
+      sourceType: "article",
+      sourceUrl: tab.url,
+    });
     showStatus("status-msg", "✓ Selection saved to vault!", "success");
   } catch (err) {
     showStatus("status-msg", err.message, "error");
+    if (err.message.includes("Session expired")) {
+      setTimeout(() => init(), 1500);
+    }
   }
 });
 
@@ -240,8 +198,9 @@ document.getElementById("save-selection-btn")?.addEventListener("click", async (
 // ---- Sign out ----
 
 document.getElementById("logout-btn")?.addEventListener("click", async () => {
-  await clearToken();
-  window.location.reload();
+  await clearTokens();
+  console.log("[AUTH] Signed out successfully");
+  init();
 });
 
 

@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState, useCallback } from "react";
 
 import Sidebar from "../components/Sidebar";
 
-import { getKnowledge, deleteKnowledge, analyzeKnowledge, syncOfflineQueue, semanticSearch as semanticSearchApi } from "../service/knowledgeService";
+import { getKnowledge, deleteKnowledge, analyzeKnowledge, bulkAnalyze, syncOfflineQueue, semanticSearch as semanticSearchApi } from "../service/knowledgeService";
 
 import AddKnowledgeModal from "../components/AddKnowledgeModal";
 import EditKnowledgeModal from "../components/EditKnowledgeModal";
@@ -22,6 +22,8 @@ const Knowledge = () => {
   const [error, setError] = useState("");
   const [analyzingId, setAnalyzingId] = useState(null);
   const [selectedDetailItem, setSelectedDetailItem] = useState(null);
+  const [bulkAnalyzing, setBulkAnalyzing] = useState(false);
+  const [bulkAnalyzeMsg, setBulkAnalyzeMsg] = useState("");
 
   // ==============================
   // Search & Filter States
@@ -81,6 +83,10 @@ const Knowledge = () => {
   // Load Knowledge
   // ==============================
 
+  // ==============================
+  // Load Knowledge
+  // ==============================
+
   const loadKnowledge = useCallback(async () => {
     try {
       setLoading(true);
@@ -102,11 +108,62 @@ const Knowledge = () => {
 
 
   // ==============================
+  // Status Polling for Background AI Analysis
+  // ==============================
+
+  useEffect(() => {
+    const hasPendingOrAnalyzing = (knowledge || []).some(
+      (item) =>
+        item.aiAnalysisStatus === "analyzing" ||
+        (!item.aiProcessed &&
+          item.aiAnalysisStatus !== "failed" &&
+          item.aiAnalysisStatus !== "completed")
+    );
+
+    if (!hasPendingOrAnalyzing) return;
+
+    console.log("[POLL] Background AI analysis active. Polling for updates...");
+    let attempts = 0;
+    const maxAttempts = 30; // Max 60 seconds
+
+    const interval = setInterval(async () => {
+      attempts++;
+      console.log(`[POLL] Polling knowledge status... (${attempts}/${maxAttempts})`);
+
+      try {
+        const freshData = await getKnowledge();
+        setKnowledge(freshData || []);
+
+        const stillPending = (freshData || []).some(
+          (item) =>
+            item.aiAnalysisStatus === "analyzing" ||
+            (!item.aiProcessed &&
+              item.aiAnalysisStatus !== "failed" &&
+              item.aiAnalysisStatus !== "completed")
+        );
+
+        if (!stillPending || attempts >= maxAttempts) {
+          console.log("[POLL] Polling complete. All items processed or timed out.");
+          clearInterval(interval);
+        }
+      } catch (pollErr) {
+        console.warn("[POLL] Error polling knowledge:", pollErr.message);
+      }
+    }, 2000);
+
+    return () => clearInterval(interval);
+  }, [knowledge]);
+
+
+  // ==============================
   // Refresh after add/edit
   // ==============================
 
-  const handleAddKnowledge = async () => {
+  const handleAddKnowledge = async (newItem) => {
     setShowAddModal(false);
+    if (newItem && newItem._id) {
+      setKnowledge((prev) => [newItem, ...prev.filter((k) => k._id !== newItem._id)]);
+    }
     await loadKnowledge();
   };
 
@@ -137,16 +194,56 @@ const Knowledge = () => {
 
 
   // ==============================
-  // AI Re-analyze
+  // Bulk Analyze
+  // ==============================
+
+  const handleBulkAnalyze = async () => {
+    console.log("\n========================================");
+    console.log("ANALYZE ALL START");
+    try {
+      setBulkAnalyzing(true);
+      setBulkAnalyzeMsg("");
+
+      console.log("ANALYZE REQUEST SENT");
+      const result = await bulkAnalyze();
+      console.log("ANALYZE RESPONSE RECEIVED:", result);
+
+      setBulkAnalyzeMsg(result.message || "Bulk analysis started in background.");
+
+      console.log("REFETCH KNOWLEDGE START");
+      const updatedData = await getKnowledge();
+      setKnowledge(updatedData || []);
+      console.log("REFETCH COMPLETE");
+
+    } catch (err) {
+      console.error("ANALYZE ALL FAILED:", err);
+      setBulkAnalyzeMsg("Bulk analysis failed. Please try again.");
+    } finally {
+      setBulkAnalyzing(false);
+      console.log("ANALYZE ALL FINISHED");
+      console.log("========================================\n");
+    }
+  };
+
+
+  // ==============================
+  // AI Re-analyze / Retry
   // ==============================
 
   const handleAnalyzeKnowledge = async (id) => {
+    console.log("\n========================================");
+    console.log(`SINGLE ITEM RE-ANALYZE START (ID: ${id})`);
     try {
       setAnalyzingId(id);
 
-      await analyzeKnowledge(id);
+      console.log("ANALYZE REQUEST SENT");
+      const result = await analyzeKnowledge(id);
+      console.log("ANALYZE RESPONSE RECEIVED:", result);
 
-      await loadKnowledge();
+      console.log("REFETCH KNOWLEDGE START");
+      const updatedData = await getKnowledge();
+      setKnowledge(updatedData || []);
+      console.log("REFETCH COMPLETE");
 
     } catch (err) {
       console.error(
@@ -155,11 +252,14 @@ const Knowledge = () => {
       );
 
       alert(
-        err.response?.data?.message ||
-        "AI analysis failed"
+        `AI analysis failed: ${err.response?.data?.message || err.message}`
       );
+      // Still refresh to pick up 'failed' status from DB
+      await loadKnowledge();
     } finally {
       setAnalyzingId(null);
+      console.log("SINGLE ITEM RE-ANALYZE FINISHED");
+      console.log("========================================\n");
     }
   };
 
@@ -347,7 +447,7 @@ const Knowledge = () => {
 
           </div>
 
-          <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+          <div className="header-actions">
             {!isOnline && (
               <span style={{
                 display: "flex",
@@ -372,7 +472,34 @@ const Knowledge = () => {
               </span>
             )}
 
-            <button
+            {/* Bulk Analyze button — appears when unprocessed items exist */}
+            {knowledge.some((k) => !k.aiProcessed) && (
+              <button
+                className="primary-button"
+                onClick={handleBulkAnalyze}
+                disabled={bulkAnalyzing}
+                style={{
+                  background: bulkAnalyzing
+                    ? "rgba(139,92,246,0.3)"
+                    : "linear-gradient(135deg, rgba(139,92,246,0.15), rgba(99,102,241,0.15))",
+                  border: "1px solid rgba(139,92,246,0.4)",
+                  color: "#c4b5fd",
+                  fontSize: "12px",
+                }}
+                title="Automatically analyze all unprocessed knowledge items with AI"
+              >
+                {bulkAnalyzing ? (
+                  <>
+                    <span style={{ display: "inline-block", animation: "spin 0.8s linear infinite", marginRight: "4px" }}>⟳</span>
+                    Analyzing...
+                  </>
+                ) : (
+                  "✦ Analyze All with AI"
+                )}
+              </button>
+            )}
+
+          <button
               className="primary-button"
               onClick={() => setShowAddModal(true)}
             >
@@ -382,6 +509,30 @@ const Knowledge = () => {
 
         </header>
 
+        {/* Bulk Analyze Status Message */}
+        {bulkAnalyzeMsg && (
+          <div style={{
+            margin: "0 0 12px",
+            padding: "10px 16px",
+            border: "1px solid rgba(139,92,246,0.3)",
+            borderRadius: "10px",
+            background: "rgba(139,92,246,0.08)",
+            color: "#c4b5fd",
+            fontSize: "13px",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+          }}>
+            <span>✦ {bulkAnalyzeMsg}</span>
+            <button
+              onClick={() => setBulkAnalyzeMsg("")}
+              style={{ background: "none", border: "none", color: "#64748b", cursor: "pointer", fontSize: "16px" }}
+            >
+              ×
+            </button>
+          </div>
+        )}
+
 
         {/* ======================
             SEARCH
@@ -389,7 +540,7 @@ const Knowledge = () => {
 
         <section className="knowledge-toolbar">
 
-          <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+          <div className="search-row">
             <div className="search-box" style={{ flex: 1 }}>
 
               <span className="search-icon">
@@ -714,9 +865,82 @@ const Knowledge = () => {
       <div>
         <h3>{item.title}</h3>
 
-        <span className="knowledge-source">
-          {item.sourceType || "note"}
-        </span>
+        <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+          <span className="knowledge-source">
+            {item.sourceType || "note"}
+          </span>
+
+          {(item.aiAnalysisStatus === "analyzing" || (!item.aiProcessed && item.aiAnalysisStatus !== "failed" && item.aiAnalysisStatus !== "completed")) && (
+            <span style={{
+              fontSize: "10px",
+              fontWeight: 600,
+              color: "#fbbf24",
+              background: "rgba(251,191,36,0.08)",
+              border: "1px solid rgba(251,191,36,0.2)",
+              borderRadius: "6px",
+              padding: "2px 6px",
+              display: "inline-flex",
+              alignItems: "center",
+              gap: "3px",
+            }}>
+              <span style={{ animation: "spin 0.8s linear infinite", display: "inline-block" }}>⟳</span>
+              ✨ AI Analyzing...
+            </span>
+          )}
+
+          {(item.aiAnalysisStatus === "completed" || item.aiProcessed) && (
+            <span style={{
+              fontSize: "10px",
+              fontWeight: 600,
+              color: "#a78bfa",
+              background: "rgba(139,92,246,0.08)",
+              border: "1px solid rgba(139,92,246,0.2)",
+              borderRadius: "6px",
+              padding: "2px 6px",
+              display: "inline-flex",
+              alignItems: "center",
+              gap: "3px",
+            }}>
+              ✓ AI Analyzed
+            </span>
+          )}
+
+          {item.aiAnalysisStatus === "failed" && (
+            <span style={{
+              fontSize: "10px",
+              fontWeight: 600,
+              color: "#f87171",
+              background: "rgba(239,68,68,0.08)",
+              border: "1px solid rgba(239,68,68,0.2)",
+              borderRadius: "6px",
+              padding: "2px 6px",
+              display: "inline-flex",
+              alignItems: "center",
+              gap: "4px",
+            }} title={item.aiAnalysisError || "AI Analysis failed"}>
+              ⚠ Analysis Failed
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleAnalyzeKnowledge(item._id);
+                }}
+                disabled={analyzingId === item._id}
+                style={{
+                  background: "rgba(239,68,68,0.2)",
+                  border: "none",
+                  borderRadius: "4px",
+                  color: "#fca5a5",
+                  fontSize: "9px",
+                  padding: "1px 5px",
+                  cursor: "pointer",
+                  marginLeft: "2px",
+                }}
+              >
+                {analyzingId === item._id ? "..." : "Retry"}
+              </button>
+            </span>
+          )}
+        </div>
       </div>
 
       <div className="knowledge-actions" onClick={(e) => e.stopPropagation()}>
@@ -778,16 +1002,18 @@ const Knowledge = () => {
           </span>
         )}
 
-        {item.sourceUrl && (
+        {(item.fileUrl || item.sourceUrl) ? (
           <a
-            href={item.sourceUrl}
+            href={item.fileUrl || item.sourceUrl}
             target="_blank"
             rel="noopener noreferrer"
             onClick={(e) => e.stopPropagation()}
           >
-            View Source
+            {item.sourceType === "pdf" ? "Open PDF 📄" : "View Source"}
           </a>
-        )}
+        ) : item.sourceType === "pdf" ? (
+          <span style={{ color: "#64748b", fontSize: "11px" }}>PDF File Unavailable</span>
+        ) : null}
       </div>
     </div>
 
@@ -841,6 +1067,8 @@ const Knowledge = () => {
           <KnowledgeDetailsModal
             item={selectedDetailItem}
             onClose={() => setSelectedDetailItem(null)}
+            allKnowledge={knowledge}
+            onOpenRelated={(relatedItem) => setSelectedDetailItem(relatedItem)}
           />
         )}
 

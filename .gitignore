@@ -1,0 +1,16 @@
+# Environment files & Secrets
+.env
+.env.*
+!.env.example
+*.env
+
+# Node & Build artifacts
+node_modules/
+dist/
+build/
+uploads/
+*.log
+
+# System files
+.DS_Store
+Thumbs.db

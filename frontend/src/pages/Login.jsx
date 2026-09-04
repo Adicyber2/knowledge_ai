@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate, Link } from "react-router-dom";
 
 import { useAuth } from "../context/AuthContext";
@@ -7,7 +7,13 @@ const Login = () => {
 
   const navigate = useNavigate();
 
-  const { login } = useAuth();
+  const { user, loading: authLoading, login } = useAuth();
+
+  useEffect(() => {
+    if (!authLoading && user) {
+      navigate("/dashboard", { replace: true });
+    }
+  }, [user, authLoading, navigate]);
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -138,12 +144,12 @@ const Login = () => {
 
               <label>Password</label>
 
-              <button
-                type="button"
+              <Link
+                to="/forgot-password"
                 className="forgot"
               >
                 Forgot password?
-              </button>
+              </Link>
 
             </div>
 
