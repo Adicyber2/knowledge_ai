@@ -3,7 +3,7 @@
  * AI Knowledge Vault Chrome Extension
  */
 
-const API_BASE = "http://localhost:3000/api";
+const API_BASE = "https://knowledge-backend-jzuz.onrender.com/api";
 
 
 // ---- Storage Helpers ----

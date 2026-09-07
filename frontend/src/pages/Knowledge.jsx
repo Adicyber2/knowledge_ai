@@ -8,7 +8,7 @@ import AddKnowledgeModal from "../components/AddKnowledgeModal";
 import EditKnowledgeModal from "../components/EditKnowledgeModal";
 import KnowledgeDetailsModal from "../components/KnowledgeDetailsModal";
 
-import "./knowledge.css";
+import "./Knowledge.css";
 
 
 const Knowledge = () => {

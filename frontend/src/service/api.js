@@ -1,7 +1,9 @@
 import axios from "axios";
 
+const API_URL = "https://knowledge-backend-jzuz.onrender.com/api";
+
 const api = axios.create({
-  baseURL: "http://localhost:3000/api",
+  baseURL: API_URL,
 });
 
 api.interceptors.request.use((config) => {
@@ -19,7 +21,6 @@ api.interceptors.response.use(
   async (error) => {
     const originalRequest = error.config;
 
-    // Avoid infinite loops
     if (
       error.response?.status === 401 &&
       originalRequest &&
@@ -28,26 +29,31 @@ api.interceptors.response.use(
       !originalRequest.url?.includes("/auth/refresh")
     ) {
       originalRequest._retry = true;
+
       const refreshToken = localStorage.getItem("refreshToken");
 
       if (refreshToken) {
         try {
-          const res = await axios.post("http://localhost:3000/api/auth/refresh", {
+          const res = await axios.post(`${API_URL}/auth/refresh`, {
             refreshToken,
           });
 
           if (res.data?.token) {
             localStorage.setItem("token", res.data.token);
+
             if (res.data.refreshToken) {
               localStorage.setItem("refreshToken", res.data.refreshToken);
             }
+
             originalRequest.headers.Authorization = `Bearer ${res.data.token}`;
+
             return api(originalRequest);
           }
         } catch (refreshError) {
           localStorage.removeItem("token");
           localStorage.removeItem("refreshToken");
           localStorage.removeItem("user");
+
           if (!window.location.pathname.includes("/login")) {
             window.location.href = "/login";
           }
@@ -56,6 +62,7 @@ api.interceptors.response.use(
         localStorage.removeItem("token");
         localStorage.removeItem("refreshToken");
         localStorage.removeItem("user");
+
         if (!window.location.pathname.includes("/login")) {
           window.location.href = "/login";
         }

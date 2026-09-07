@@ -11,7 +11,7 @@
     "notifications"
   ],
   "host_permissions": [
-    "http://localhost:3000/*"
+    "https://knowledge-backend-jzuz.onrender.com/*"
   ],
   "action": {
     "default_popup": "popup.html",

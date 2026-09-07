@@ -914,7 +914,7 @@ export const importFromImage = async (req, res) => {
       console.warn("Failed to write image file to disk:", writeErr.message);
     }
 
-    const imageUrl = `http://localhost:3000/uploads/${filename}`;
+    const imageUrl = `https://knowledge-backend-jzuz.onrender.com/uploads/${filename}`;
 
     const base64Image = buffer.toString("base64");
 
