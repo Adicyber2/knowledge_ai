@@ -3,7 +3,7 @@
  * AI Knowledge Vault Chrome Extension
  */
 
-const API_BASE = "https://knowledge-backend-jzuz.onrender.com/api";
+const API_BASE = "https://knowledge-backend-zjuz.onrender.com/api";
 
 
 // ---- Storage Helpers ----

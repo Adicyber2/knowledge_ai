@@ -58,7 +58,7 @@ export const uploadFileToImageKit = async ({ buffer, fileName, folder = "/knowle
     const uploadPath = pathModule.default.join(process.cwd(), "uploads", cleanFilename);
 
     await fsModule.default.promises.writeFile(uploadPath, buffer);
-    const localUrl = `https://knowledge-backend-jzuz.onrender.com/uploads/${cleanFilename}`;
+    const localUrl = `https://knowledge-backend-zjuz.onrender.com/uploads/${cleanFilename}`;
     console.log(`[STORAGE FALLBACK] Saved PDF file to local storage: ${localUrl}`);
     return localUrl;
 

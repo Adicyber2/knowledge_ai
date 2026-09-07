@@ -11,7 +11,7 @@
     "notifications"
   ],
   "host_permissions": [
-    "https://knowledge-backend-jzuz.onrender.com/*"
+    "https://knowledge-backend-zjuz.onrender.com/*"
   ],
   "action": {
     "default_popup": "popup.html",
