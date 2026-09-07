@@ -36,7 +36,7 @@ app.use(cors({
   origin: [
     "http://localhost:5173",
     "http://localhost:5174",
-    "https://knowledge-backend-zjuz.onrender.com",
+    "https://knowledge-frontedn.onrender.com",
     "chrome-extension://",
   ],
   credentials: true,
