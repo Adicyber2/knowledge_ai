@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import Sidebar from "../components/Sidebar";
 import { askAI } from "../service/aiService";
 import { getKnowledge } from "../service/knowledgeService";
@@ -40,6 +40,37 @@ const AiChat = () => {
   const [chats, setChats] = useState([]);
   const [activeChatId, setActiveChatId] = useState(null);
   const [chatLoading, setChatLoading] = useState(true);
+
+  // Auto-scroll ref
+  const messagesEndRef = useRef(null);
+  const chatMessagesContainerRef = useRef(null);
+
+
+  // Track whether user is near bottom before new messages arrive
+  const wasNearBottomRef = useRef(true);
+
+  // Update nearBottom tracking on scroll
+  useEffect(() => {
+    const container = chatMessagesContainerRef.current;
+    if (!container) return;
+
+    const handleScroll = () => {
+      const { scrollTop, scrollHeight, clientHeight } = container;
+      wasNearBottomRef.current = scrollHeight - (scrollTop + clientHeight) < 120;
+    };
+
+    container.addEventListener("scroll", handleScroll, { passive: true });
+    return () => container.removeEventListener("scroll", handleScroll);
+  }, []);
+
+  // Auto-scroll to bottom when messages change
+  useEffect(() => {
+    if (wasNearBottomRef.current) {
+      setTimeout(() => {
+        messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+      }, 50);
+    }
+  }, [messages]);
 
 
   // Load knowledge list for sidebar overview
@@ -209,10 +240,10 @@ const AiChat = () => {
 
 
   return (
-    <div className="vault-layout" style={{ minHeight: "100vh" }}>
+    <div className="vault-layout" style={{ height: "100vh", overflow: "hidden" }}>
       <Sidebar />
 
-      <div className="ai-workspace" style={{ flex: 1 }}>
+      <div className="ai-workspace">
 
         {/* =====================================================
             LEFT SIDEBAR — CHAT HISTORY
@@ -289,7 +320,7 @@ const AiChat = () => {
 
           {/* MESSAGES */}
 
-          <div className="chat-messages">
+          <div className="chat-messages" ref={chatMessagesContainerRef}>
 
             {messages.length === 0 && !loading && (
               <div className="empty-chat">
@@ -360,6 +391,8 @@ const AiChat = () => {
                 </div>
               </div>
             )}
+
+            <div ref={messagesEndRef} />
 
           </div>
 

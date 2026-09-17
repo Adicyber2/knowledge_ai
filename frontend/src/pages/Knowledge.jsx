@@ -684,7 +684,7 @@ const Knowledge = () => {
                     setSelectedTag(tag)
                   }
                 >
-                  #{tag}
+                  {tag.replace(/^#/, '')}
                 </button>
 
               ))}
@@ -865,7 +865,7 @@ const Knowledge = () => {
       <div>
         <h3>{item.title}</h3>
 
-        <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: "6px", flexWrap: "wrap", minWidth: 0 }}>
           <span className="knowledge-source">
             {item.sourceType || "note"}
           </span>
@@ -982,7 +982,7 @@ const Knowledge = () => {
       <div className="knowledge-tags">
         {item.tags.map((tag, index) => (
           <span key={index} className="knowledge-tag">
-            #{tag}
+            {tag.replace(/^#/, '')}
           </span>
         ))}
       </div>
@@ -996,11 +996,6 @@ const Knowledge = () => {
       </span>
 
       <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
-        {item.aiProcessed && (
-          <span style={{ color: "#a78bfa", fontSize: "10px", fontWeight: 600 }}>
-            ✦ AI
-          </span>
-        )}
 
         {(item.fileUrl || item.sourceUrl) ? (
           <a

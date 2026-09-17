@@ -17,19 +17,6 @@ const KnowledgeCard = ({
 
       <div className="knowledge-card-top">
 
-        <div className="knowledge-icon">
-
-          {item.sourceType === "youtube"
-            ? "▶"
-            : item.sourceType === "pdf"
-            ? "📄"
-            : item.sourceType === "article"
-            ? "🌐"
-            : "📝"}
-
-        </div>
-
-
         <div className="card-menu-wrapper">
 
           <button
@@ -60,7 +47,7 @@ const KnowledgeCard = ({
 
 
              <button
-  onClick={() => handleDeleteKnowledge(item._id)}
+  onClick={() => onDelete(item._id)}
 >
   Delete
 </button>
@@ -106,7 +93,7 @@ const KnowledgeCard = ({
             (tag) => (
 
               <span key={tag}>
-                #{tag}
+                {tag}
               </span>
 
             )

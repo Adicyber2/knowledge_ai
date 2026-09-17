@@ -25,6 +25,9 @@
   gap: 16px;
 
   margin-top: 35px;
+
+  max-width: 100%;
+  overflow: hidden;
 }
 
 .knowledge-card {
@@ -62,7 +65,7 @@
 
 .knowledge-card-top {
   display: flex;
-  justify-content: space-between;
+  justify-content: flex-end;
 }
 
 .knowledge-icon {
@@ -99,6 +102,7 @@
 
 .knowledge-card-content {
   margin-top: 25px;
+  min-width: 0;
 }
 
 .source-type {
@@ -115,6 +119,10 @@
 
   font-size: 17px;
   line-height: 1.3;
+  
+  word-break: break-word;
+  overflow-wrap: anywhere;
+  min-width: 0;
 }
 
 .knowledge-card p {
@@ -124,21 +132,33 @@
 
   font-size: 12px;
   line-height: 1.6;
+  
+  word-break: break-word;
+  overflow-wrap: anywhere;
+  min-width: 0;
 }
 
 .knowledge-card-footer {
   display: flex;
   align-items: flex-end;
   justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 10px;
+  min-width: 0;
 
   margin-top: auto;
   padding-top: 20px;
 }
 
+.tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  min-width: 0;
+}
+
 .tags span {
   display: inline-block;
-
-  margin-right: 5px;
 
   padding: 5px 7px;
 
@@ -149,11 +169,15 @@
   color: #94a3b8;
 
   font-size: 9px;
+  
+  word-break: break-word;
+  overflow-wrap: anywhere;
 }
 
 .knowledge-card-footer > small {
   color: #475569;
   font-size: 9px;
+  white-space: nowrap;
 }
 
 .knowledge-skeleton {
@@ -233,7 +257,7 @@
 @media (max-width: 1100px) {
 
   .knowledge-grid {
-    grid-template-columns: repeat(2, 1fr);
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
 }
@@ -241,13 +265,31 @@
 @media (max-width: 700px) {
 
   .knowledge-grid {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 12px;
   }
 
   .knowledge-header {
     flex-direction: column;
     align-items: flex-start;
     gap: 20px;
+  }
+  
+  .knowledge-card {
+    min-height: 240px;
+    padding: 16px;
+  }
+  
+  .knowledge-card-content {
+    margin-top: 16px;
+  }
+  
+  .knowledge-card h3 {
+    font-size: 15px;
+  }
+  
+  .knowledge-card p {
+    font-size: 11px;
   }
 
 }
@@ -259,6 +301,8 @@
   display: flex;
   gap: 10px;
   align-items: center;
+  flex-shrink: 0;
+  white-space: nowrap;
 }
 
 /* Common Button */
@@ -335,4 +379,183 @@
 @keyframes spin {
   from { transform: rotate(0deg); }
   to { transform: rotate(360deg); }
+}
+
+
+/* =====================================
+   KNOWLEDGE CARD — HEADER
+===================================== */
+
+.knowledge-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 10px;
+  min-width: 0;
+}
+
+.knowledge-card-header > div:first-child {
+  flex: 1;
+  min-width: 0;
+}
+
+.knowledge-card-header h3 {
+  margin-top: 0;
+  font-size: 16px;
+  line-height: 1.35;
+  word-break: break-word;
+  overflow-wrap: anywhere;
+  min-width: 0;
+}
+
+
+/* =====================================
+   KNOWLEDGE SOURCE BADGE
+===================================== */
+
+.knowledge-source {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 6px;
+
+  background: rgba(139, 92, 246, 0.1);
+  color: #a78bfa;
+
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.8px;
+
+  white-space: nowrap;
+}
+
+
+/* =====================================
+   KNOWLEDGE CONTENT TEXT
+===================================== */
+
+.knowledge-content {
+  margin-top: 12px;
+
+  color: #94a3b8;
+
+  font-size: 13px;
+  line-height: 1.6;
+
+  word-break: break-word;
+  overflow-wrap: anywhere;
+  min-width: 0;
+}
+
+
+/* =====================================
+   KNOWLEDGE TAGS
+===================================== */
+
+.knowledge-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 14px;
+  min-width: 0;
+}
+
+.knowledge-tag {
+  display: inline-block;
+
+  padding: 4px 10px;
+
+  border-radius: 6px;
+
+  background: #191c25;
+  color: #94a3b8;
+
+  font-size: 11px;
+  font-weight: 500;
+
+  word-break: break-word;
+  overflow-wrap: anywhere;
+  max-width: 100%;
+}
+
+
+/* =====================================
+   CARD OVERFLOW SAFETY
+===================================== */
+
+.knowledge-card {
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+}
+
+.knowledge-card a {
+  word-break: break-all;
+  overflow-wrap: anywhere;
+}
+
+
+/* =====================================
+   SEARCH ROW
+===================================== */
+
+.search-row {
+  display: flex;
+  gap: 10px;
+  align-items: stretch;
+}
+
+
+/* =====================================
+   HEADER ACTIONS
+===================================== */
+
+.header-actions {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+
+/* =====================================
+   MOBILE — KNOWLEDGE CARDS
+===================================== */
+
+@media (max-width: 700px) {
+  .knowledge-card-header {
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .knowledge-card-header h3 {
+    font-size: 14px;
+  }
+
+  .knowledge-actions {
+    width: 100%;
+    justify-content: flex-end;
+  }
+
+  .knowledge-content {
+    font-size: 12px;
+  }
+
+  .knowledge-tag {
+    font-size: 10px;
+    padding: 3px 8px;
+  }
+
+  .search-row {
+    flex-direction: column;
+  }
+
+  .header-actions {
+    width: 100%;
+  }
+
+  .header-actions button {
+    flex: 1;
+    text-align: center;
+  }
 }
